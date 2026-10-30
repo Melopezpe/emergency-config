@@ -11,9 +11,8 @@ fullscreen = 0
 android.permissions = CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERVICE,INTERNET,WAKE_LOCK
 android.api = 33
 android.minapi = 21
-android.ndk = 25b
-android.sdk = 33
-android.archs = arm64-v8a,armeabi-v7a
+android.ndk = 23b
+android.archs = arm64-v8a
 
 # Arrancar automaticamente al encender el telefono
 android.add_activities = org.phonecontrol.BootReceiver
