@@ -11,7 +11,7 @@ fullscreen = 0
 android.permissions = CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERVICE,INTERNET,WAKE_LOCK
 android.api = 33
 android.minapi = 21
-android.ndk = 23b
+android.ndk = 25c
 android.archs = arm64-v8a
 
 # Arrancar automaticamente al encender el telefono
