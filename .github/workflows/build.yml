@@ -20,25 +20,36 @@ jobs:
           git zip unzip openjdk-17-jdk python3-pip \
           autoconf libtool pkg-config zlib1g-dev \
           libncurses5-dev libncursesw5-dev libtinfo5 \
-          cmake libffi-dev libssl-dev
+          cmake libffi-dev libssl-dev \
+          gcc g++ lld binutils
 
     - name: Instalar Python deps
       run: |
         pip3 install buildozer cython
 
-    - name: Cache Android SDK y NDK
+    - name: Descargar NDK 25c manualmente
+      run: |
+        mkdir -p ~/.buildozer/android/platform
+        cd ~/.buildozer/android/platform
+        wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
+        unzip -q android-ndk-r25c-linux.zip
+        rm android-ndk-r25c-linux.zip
+        echo "NDK 25c listo"
+
+    - name: Cache SDK buildozer
       uses: actions/cache@v4
       with:
-        path: |
-          ~/.buildozer
-          ~/.android
+        path: ~/.buildozer
         key: android-buildozer-${{ hashFiles('buildozer.spec') }}
         restore-keys: |
           android-buildozer-
 
     - name: Compilar APK
+      env:
+        BUILDOZER_WARN_ON_ROOT: "0"
+        ANDROIDNDK: ~/.buildozer/android/platform/android-ndk-r25c
       run: |
-        yes | buildozer android debug 2>&1
+        buildozer android debug 2>&1
 
     - name: Subir APK como artifact
       uses: actions/upload-artifact@v4
