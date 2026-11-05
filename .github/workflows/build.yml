@@ -8,13 +8,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 120 # Evita que se cancele si tarda mucho
+    timeout-minutes: 120
 
     steps:
     - name: Checkout codigo
       uses: actions/checkout@v4
 
-    # 1. LIBERAR ESPACIO EN DISCO (Elimina software que no usamos)
     - name: Liberar espacio en disco
       run: |
         sudo rm -rf /usr/share/dotnet
@@ -23,13 +22,19 @@ jobs:
         sudo rm -rf "$AGENT_TOOLSDIRECTORY"
         sudo apt-get clean
 
-    # 2. AUMENTAR LA MEMORIA SWAP (Crea un archivo de 10GB de memoria virtual)
+    # CORREGIDO: Desactivar la swap existente antes de crear la nueva
     - name: Aumentar memoria Swap a 10GB
       run: |
-        sudo fallocate -l 10G /swapfile
+        # Desactiva cualquier swap activa que GitHub ya tenga por defecto
+        sudo swapoff -a 2>/dev/null || true
+        # Elimina el archivo de swap anterior si existe
+        sudo rm -f /swapfile 2>/dev/null || true
+        # Crea la nueva swap (fallocate puede fallar en algunos FS, usamos dd como respaldo)
+        sudo fallocate -l 10G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=10240
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
         sudo swapon /swapfile
+        # Verifica que la swap esté activa
         sudo swapon --show
 
     - name: Instalar dependencias del sistema
