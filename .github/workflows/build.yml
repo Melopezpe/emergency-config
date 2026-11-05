@@ -17,7 +17,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          git zip unzip python3-pip \
+          git zip unzip python3-pip ant \
           autoconf libtool pkg-config zlib1g-dev \
           libncurses-dev libtinfo-dev \
           cmake libffi-dev libssl-dev libltdl-dev \
@@ -41,9 +41,13 @@ jobs:
     - name: Compilar APK
       env:
         BUILDOZER_WARN_ON_ROOT: "0"
+        ANT_HOME: /usr/share/ant
       run: |
         mkdir -p ~/.android
         touch ~/.android/repositories.cfg
+        # Creamos un enlace simbolico para engañar a Buildozer y que crea que ANT ya esta descargado
+        mkdir -p ~/.buildozer/android/platform/
+        ln -s /usr/share/ant ~/.buildozer/android/platform/apache-ant-1.9.4
         buildozer android debug 2>&1 | tee build.log
       shell: bash
 
@@ -51,6 +55,7 @@ jobs:
       if: failure()
       env:
         BUILDOZER_WARN_ON_ROOT: "0"
+        ANT_HOME: /usr/share/ant
       run: |
         SDK_PATH=~/.buildozer/android/platform/android-sdk
         SDKMANAGER="$SDK_PATH/cmdline-tools/latest/bin/sdkmanager"
