@@ -8,10 +8,29 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 120 # Evita que se cancele si tarda mucho
 
     steps:
     - name: Checkout codigo
       uses: actions/checkout@v4
+
+    # 1. LIBERAR ESPACIO EN DISCO (Elimina software que no usamos)
+    - name: Liberar espacio en disco
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        sudo apt-get clean
+
+    # 2. AUMENTAR LA MEMORIA SWAP (Crea un archivo de 10GB de memoria virtual)
+    - name: Aumentar memoria Swap a 10GB
+      run: |
+        sudo fallocate -l 10G /swapfile
+        sudo chmod 600 /swapfile
+        sudo mkswap /swapfile
+        sudo swapon /swapfile
+        sudo swapon --show
 
     - name: Instalar dependencias del sistema
       run: |
@@ -45,7 +64,6 @@ jobs:
       run: |
         mkdir -p ~/.android
         touch ~/.android/repositories.cfg
-        # Creamos un enlace simbolico para engañar a Buildozer y que crea que ANT ya esta descargado
         mkdir -p ~/.buildozer/android/platform/
         ln -s /usr/share/ant ~/.buildozer/android/platform/apache-ant-1.9.4
         buildozer android debug 2>&1 | tee build.log
