@@ -1,40 +1,37 @@
 workflows:
   android-workflow:
-    name: Build Android APK (Kivy Emergency)
+    name: Build Android APK
     max_build_duration: 120
-    instance_type: mac_mini_m1 # Máquina rápida con Apple Silicon
+    instance_type: mac_mini_m1
     environment:
       java: 17
-      vars:
-        PACKAGE_NAME: "org.melopezpe.emergency"
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: 'main'
-          include: true
     scripts:
-      - name: Set up build environment
+      - name: "Forzar Python 3.11 e instalar Buildozer"
         script: |
-          # Codemagic ya trae Buildozer y las dependencias de Android preinstaladas
-          # Solo nos aseguramos de tener las herramientas básicas
-          brew install autoconf automake libtool pkg-config
-          python3 -m pip install --upgrade pip
-          python3 -m pip install buildozer==1.5.0 cython==0.29.36
-      - name: Build with Buildozer
+          # 1. Instalamos Python 3.11 (Codemagic lo tiene disponible vía pyenv)
+          pyenv install 3.11.9 || true
+          pyenv global 3.11.9
+          
+          # 2. Instalamos setuptools para que distutils exista
+          pip install --upgrade pip setuptools wheel
+          pip install buildozer==1.5.0 cython==0.29.36
+          
+          # 3. EL TRUCO: Sobrescribimos el comando 'buildozer' 
+          # para que apunte al Python 3.11 y no al 3.12
+          echo '#!/bin/bash' > /tmp/buildozer_fixed
+          echo '/Users/builder/.pyenv/versions/3.11.9/bin/python3 -m buildozer "$@"' >> /tmp/buildozer_fixed
+          chmod +x /tmp/buildozer_fixed
+          sudo mv /tmp/buildozer_fixed /usr/local/bin/buildozer
+          
+          # Verificamos que ahora sí apunta bien
+          which buildozer
+          buildozer --version
+
+      - name: "Compilar APK"
         script: |
-          # Limpiamos cualquier compilación previa para evitar errores
           rm -rf .buildozer bin
-          # Compilamos en modo debug (genera un APK firmado con debug key, instalable)
           buildozer android debug
+          
     artifacts:
       - bin/*.apk
       - ./*.log
-    publishing:
-      # Opcional: Si quieres que te envíe el APK a tu correo o lo suba a GitHub
-      email:
-        recipients:
-          - martinlopezperez614@gmail.com # <-- Cambia esto por tu correo
-        notify:
-          success: true
-          failure: true
