@@ -33,10 +33,66 @@ jobs:
         pip3 install --upgrade pip
         pip3 install buildozer==1.5.0 cython==0.29.36
 
-    - name: Limpiar compilaciones previas corruptas
-      run: |
-        rm -rf .buildozer ~/.buildozer
+    # --------------------------------------------------------
+    # CACHE: reutiliza el SDK/NDK entre runs para no re-descargar
+    # --------------------------------------------------------
+    - name: Cache Buildozer global (~/.buildozer)
+      uses: actions/cache@v4
+      with:
+        path: ~/.buildozer
+        key: buildozer-global-${{ runner.os }}-v1
+        restore-keys: |
+          buildozer-global-${{ runner.os }}-
 
+    - name: Cache Buildozer local (.buildozer)
+      uses: actions/cache@v4
+      with:
+        path: .buildozer
+        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v1
+        restore-keys: |
+          buildozer-local-${{ runner.os }}-
+
+    # --------------------------------------------------------
+    # PRE-DESCARGAR el SDK con reintentos (evita el ContentTooShort)
+    # --------------------------------------------------------
+    - name: Pre-instalar Android SDK (con reintentos)
+      shell: bash
+      run: |
+        set -e
+        SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
+        if [ -f "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" ]; then
+          echo "SDK ya cacheado, saltando descarga"
+          exit 0
+        fi
+
+        mkdir -p "$SDK_DIR"
+        cd "$SDK_DIR"
+
+        URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+        for i in 1 2 3 4 5; do
+          echo "Intento $i de descargar commandlinetools..."
+          if curl -fL --retry 5 --retry-delay 5 --retry-all-errors \
+                  -o cmdtools.zip "$URL"; then
+            break
+          fi
+          echo "Fallo en intento $i, esperando 10s..."
+          sleep 10
+        done
+
+        unzip -q cmdtools.zip -d cmdline-tools-tmp
+        mkdir -p cmdline-tools
+        mv cmdline-tools-tmp/cmdline-tools cmdline-tools/latest
+        rm -rf cmdline-tools-tmp cmdtools.zip
+
+        export PATH="$SDK_DIR/cmdline-tools/latest/bin:$PATH"
+        yes | sdkmanager --licenses || true
+        sdkmanager "platform-tools" "platforms;android-33" "build-tools;34.0.0" || true
+
+        echo "SDK pre-instalado en $SDK_DIR"
+
+    # --------------------------------------------------------
+    # Compilar APK
+    # --------------------------------------------------------
     - name: Compilar APK
       env:
         BUILDOZER_WARN_ON_ROOT: "0"
