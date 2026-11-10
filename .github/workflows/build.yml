@@ -34,13 +34,13 @@ jobs:
         pip3 install buildozer==1.5.0 cython==0.29.36
 
     # --------------------------------------------------------
-    # CACHE: reutiliza el SDK/NDK entre runs para no re-descargar
+    # CACHE
     # --------------------------------------------------------
     - name: Cache Buildozer global (~/.buildozer)
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ runner.os }}-v1
+        key: buildozer-global-${{ runner.os }}-v2
         restore-keys: |
           buildozer-global-${{ runner.os }}-
 
@@ -48,12 +48,12 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v1
+        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v2
         restore-keys: |
           buildozer-local-${{ runner.os }}-
 
     # --------------------------------------------------------
-    # PRE-DESCARGAR el SDK con reintentos (evita el ContentTooShort)
+    # PRE-DESCARGAR SDK con reintentos
     # --------------------------------------------------------
     - name: Pre-instalar Android SDK (con reintentos)
       shell: bash
@@ -91,7 +91,31 @@ jobs:
         echo "SDK pre-instalado en $SDK_DIR"
 
     # --------------------------------------------------------
-    # Compilar APK
+    # COMPATIBILIDAD con Buildozer 1.5.0
+    # --------------------------------------------------------
+    - name: Crear estructura de SDK compatible con Buildozer 1.5
+      shell: bash
+      run: |
+        set -e
+        SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
+        echo "=== Contenido de $SDK_DIR ==="
+        ls -la "$SDK_DIR" || true
+
+        # Buildozer 1.5.0 busca en tools/bin/sdkmanager (estructura antigua)
+        # Nuestro commandlinetools está en cmdline-tools/latest/
+        if [ -d "$SDK_DIR/cmdline-tools/latest" ] && [ ! -e "$SDK_DIR/tools" ]; then
+          echo "Creando symlink $SDK_DIR/tools -> $SDK_DIR/cmdline-tools/latest"
+          ln -s "$SDK_DIR/cmdline-tools/latest" "$SDK_DIR/tools"
+        elif [ -d "$SDK_DIR/tools" ] && [ ! -L "$SDK_DIR/tools" ]; then
+          echo "$SDK_DIR/tools ya existe (directorio real), no se toca"
+        fi
+
+        echo "=== Verificando sdkmanager ==="
+        ls -la "$SDK_DIR/tools/bin/sdkmanager" || true
+        echo "sdkmanager OK en $SDK_DIR/tools/bin/sdkmanager"
+
+    # --------------------------------------------------------
+    # COMPILAR
     # --------------------------------------------------------
     - name: Compilar APK
       env:
