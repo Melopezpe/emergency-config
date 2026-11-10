@@ -1,36 +1,51 @@
 [app]
+
+# (str) Title of your application
 title = Emergency Control
-package.name = emergency
-package.domain = org.melopezpe
 
+# (str) Package name
+package.name = emergencycontrol
+
+# (str) Package domain (needed for android packaging)
+package.domain = org.phonecontrol
+
+# (str) Source files where the let's go
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,txt
-source.include_patterns = service.py
 
+# (list) Source files to include (let it empty if you want to include all files)
+source.include_exts = py,png,jpg,kv,atlas,txt
+
+# (list) Application version
 version = 1.0
 
+# (list) Application requirements
 requirements = python3,kivy,pyjnius,android
 
-orientation = portrait
-fullscreen = 0
+# (list) Permissions
+android.permissions = CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERVICE,INTERNET,WAKE_LOCK
 
+# (int) Target Android API
 android.api = 33
-android.minapi = 24
-android.ndk_api = 24
+
+# (int) Minimum API your APK will support
+android.minapi = 21
+
+# (int) Android NDK version to use
+android.ndk = 25c
+
+# (str) Android archs to build for
 android.archs = arm64-v8a
+
+# (str) Android build tools version
+android.build_tools_version = 34.0.0
+
+# (Bool) Accept SDK license
 android.accept_sdk_license = True
-android.allow_backup = True
-
-android.permissions = INTERNET,CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERVICE,WAKE_LOCK,POST_NOTIFICATIONS,REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-
-# Nombre del servicio: se genera como <package>.Service<Name>
-# -> org.melopezpe.emergency.ServiceEmergency
-services = emergency:service.py
-
-# No usar presplash por ahora
-presplash.filename =
-icon.filename =
 
 [buildozer]
+
+# (int) Log level (0 = error only, 1 = info, 2 = debug (default))
 log_level = 2
+
+# (int) Display warning if buildozer is run as root (0 = False, 1 = True)
 warn_on_root = 0
