@@ -296,7 +296,10 @@ class EmergencyApp(App):
                     PowerManager.PARTIAL_WAKE_LOCK, 'EmergencyApp::WakeLock'
                 )
                 self.wake_lock.acquire()
-                start_foreground_service()
+                
+                # RETRASO DE 2 SEGUNDOS PARA QUE ANDROID ESTÉ LISTO PARA EL SERVICIO
+                Clock.schedule_once(lambda dt: start_foreground_service(), 2)
+                
             except Exception as e:
                 print(f"ERROR on_start: {e}")
 
