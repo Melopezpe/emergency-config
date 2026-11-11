@@ -122,53 +122,28 @@ def send_sms(number, message):
 
 
 def start_foreground_service():
-    """Lanza un Foreground Service para que Android no mate la app en segundo plano."""
+    """Arranca el EmergencyService nativo de Android."""
     if platform != 'android':
         return
     try:
         from jnius import autoclass, cast
         from android import mActivity
 
+        Intent = autoclass('android.content.Intent')
         Context = autoclass('android.content.Context')
-        PendingIntent = autoclass('android.app.PendingIntent')
-        NotificationChannel = autoclass('android.app.NotificationChannel')
-        NotificationManager = autoclass('android.app.NotificationManager')
-        NotificationBuilder = autoclass('android.app.Notification$Builder')
         Build = autoclass('android.os.Build')
+        ServiceClass = autoclass('org.phonecontrol.emergencycontrol.EmergencyService')
 
         activity = mActivity
         context = cast('android.content.Context', activity)
-        channel_id = 'emergency_control_channel'
 
+        intent = Intent(context, ServiceClass)
         if Build.VERSION.SDK_INT >= 26:
-            nm = cast('android.app.NotificationManager',
-                      context.getSystemService(Context.NOTIFICATION_SERVICE))
-            channel = NotificationChannel(
-                channel_id,
-                'Emergency Control',
-                NotificationManager.IMPORTANCE_LOW
-            )
-            channel.setDescription('Servicio de control de emergencias activo')
-            nm.createNotificationChannel(channel)
+            context.startForegroundService(intent)
+        else:
+            context.startService(intent)
 
-        launch_intent = context.getPackageManager().getLaunchIntentForPackage(
-            context.getPackageName()
-        )
-        pending_intent = PendingIntent.getActivity(
-            context, 0, launch_intent,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        )
-
-        builder = NotificationBuilder(context, channel_id)
-        builder.setContentTitle('Emergency Control')
-        builder.setContentText('Servicio activo — escuchando comandos')
-        builder.setSmallIcon(activity.getApplicationInfo().icon)
-        builder.setContentIntent(pending_intent)
-        builder.setOngoing(True)
-
-        notification = builder.build()
-        activity.startForeground(1, notification)
-        print("FOREGROUND SERVICE: activo OK")
+        print("FOREGROUND SERVICE: arrancado OK")
     except Exception as e:
         print(f"ERROR foreground_service: {e}")
 
