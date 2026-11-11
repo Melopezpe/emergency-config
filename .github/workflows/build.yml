@@ -139,6 +139,6 @@ jobs:
           Cambios v1.2:
           - Foreground Service: la app sigue activa en segundo plano
           - Permiso POST_NOTIFICATIONS (Android 13+)
-          - Release publicado automaticamente
+          - Release publicado automaticamente 
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
