@@ -13,7 +13,7 @@ android.permissions = CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERV
 
 # ¡ESTA ES LA LÍNEA MÁGICA!
 android.add_src = src
-
+android.services = org.phonecontrol.emergencycontrol.EmergencyService:foregroundServiceType=dataSync
 android.api = 33
 android.minapi = 21
 android.ndk = 25c
