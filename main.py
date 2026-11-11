@@ -132,6 +132,8 @@ def start_foreground_service():
         Intent = autoclass('android.content.Intent')
         Context = autoclass('android.content.Context')
         Build = autoclass('android.os.Build')
+        
+        # Si el archivo Java no se compiló correctamente en GitHub, esto lanzará un error.
         ServiceClass = autoclass('org.phonecontrol.emergencycontrol.EmergencyService')
 
         activity = mActivity
@@ -145,7 +147,7 @@ def start_foreground_service():
 
         print("FOREGROUND SERVICE: arrancado OK")
     except Exception as e:
-        print(f"ERROR foreground_service: {e}")
+        print(f"ERROR GRAVE foreground_service: {e}")
 
 
 def poll_server(url):
