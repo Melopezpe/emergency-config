@@ -17,7 +17,7 @@ public class EmergencyService extends Service {
 
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        return null; 
     }
 
     @Override
