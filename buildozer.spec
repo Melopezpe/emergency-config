@@ -11,15 +11,10 @@ requirements = python3,kivy,pyjnius
 
 android.permissions = CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERVICE,INTERNET,WAKE_LOCK,POST_NOTIFICATIONS
 
-# 👇 ESTO ES NUEVO: compila el Java y lo mete al APK
-android.add_src = src
-android.add_jars = 
-android.gradle_dependencies = 
-
-# 👇 Declara el servicio en el AndroidManifest.xml
+# Esta es la línea mágica que inyecta el Java directamente en la app
+android.add_src = EmergencyService.java
 android.services = org.phonecontrol.emergencycontrol.EmergencyService:foregroundServiceType=dataSync
 
-# Android 12+ exige declarar el tipo de foreground service
 android.api = 33
 android.minapi = 21
 android.ndk = 25c
