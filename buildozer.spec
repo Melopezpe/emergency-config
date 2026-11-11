@@ -4,15 +4,15 @@ title = Emergency Control
 package.name = emergencycontrol
 package.domain = org.phonecontrol
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,txt
+source.include_exts = py,png,jpg,kv,atlas,txt,java
 
 version = 1.0
-requirements = python3,kivy,pyjnius
+# Aquí le decimos que instale el proyecto actual (que contiene el setup.py y el Java)
+requirements = python3,kivy,pyjnius,.
 
 android.permissions = CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERVICE,INTERNET,WAKE_LOCK,POST_NOTIFICATIONS
 
-# Esta es la línea mágica que inyecta el Java directamente en la app
-android.add_src = EmergencyService.java
+# Quitamos add_src y usamos el empaquetado de Python
 android.services = org.phonecontrol.emergencycontrol.EmergencyService:foregroundServiceType=dataSync
 
 android.api = 33
