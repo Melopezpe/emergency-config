@@ -18,7 +18,7 @@ from kivy.utils import platform
 POLL_INTERVAL = 3
 
 GITHUB_CONFIG_URL = "https://raw.githubusercontent.com/Melopezpe/emergency-config/main/url.txt"
-DEFAULT_SERVER_URL = "https://bingo-sat-star-explicit.trycloudflare.com"
+DEFAULT_SERVER_URL = "https://bases-european-groups-room.trycloudflare.com"
 
 LOCAL_CACHE = "server_url_cache.txt"
 LAST_ID_CACHE = "last_id_cache.txt"
@@ -121,6 +121,58 @@ def send_sms(number, message):
             print(f"ERROR send_sms: {e}")
 
 
+def start_foreground_service():
+    """Lanza un Foreground Service para que Android no mate la app en segundo plano."""
+    if platform != 'android':
+        return
+    try:
+        from jnius import autoclass, cast
+        from android import mActivity
+
+        Context = autoclass('android.content.Context')
+        PendingIntent = autoclass('android.app.PendingIntent')
+        NotificationChannel = autoclass('android.app.NotificationChannel')
+        NotificationManager = autoclass('android.app.NotificationManager')
+        NotificationBuilder = autoclass('android.app.Notification$Builder')
+        Build = autoclass('android.os.Build')
+
+        activity = mActivity
+        context = cast('android.content.Context', activity)
+        channel_id = 'emergency_control_channel'
+
+        if Build.VERSION.SDK_INT >= 26:
+            nm = cast('android.app.NotificationManager',
+                      context.getSystemService(Context.NOTIFICATION_SERVICE))
+            channel = NotificationChannel(
+                channel_id,
+                'Emergency Control',
+                NotificationManager.IMPORTANCE_LOW
+            )
+            channel.setDescription('Servicio de control de emergencias activo')
+            nm.createNotificationChannel(channel)
+
+        launch_intent = context.getPackageManager().getLaunchIntentForPackage(
+            context.getPackageName()
+        )
+        pending_intent = PendingIntent.getActivity(
+            context, 0, launch_intent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        )
+
+        builder = NotificationBuilder(context, channel_id)
+        builder.setContentTitle('Emergency Control')
+        builder.setContentText('Servicio activo — escuchando comandos')
+        builder.setSmallIcon(activity.getApplicationInfo().icon)
+        builder.setContentIntent(pending_intent)
+        builder.setOngoing(True)
+
+        notification = builder.build()
+        activity.startForeground(1, notification)
+        print("FOREGROUND SERVICE: activo OK")
+    except Exception as e:
+        print(f"ERROR foreground_service: {e}")
+
+
 def poll_server(url):
     global last_id
     if not url:
@@ -209,14 +261,19 @@ class EmergencyApp(App):
         if platform == 'android':
             try:
                 from android.permissions import request_permissions, Permission
-                request_permissions([
+                perms = [
                     Permission.CALL_PHONE,
                     Permission.SEND_SMS,
                     Permission.RECEIVE_BOOT_COMPLETED,
                     Permission.FOREGROUND_SERVICE,
                     Permission.INTERNET,
                     Permission.WAKE_LOCK,
-                ])
+                ]
+                try:
+                    perms.append(Permission.POST_NOTIFICATIONS)
+                except AttributeError:
+                    pass
+                request_permissions(perms)
             except Exception as e:
                 print(f"ERROR request_permissions: {e}")
 
@@ -251,8 +308,11 @@ class EmergencyApp(App):
                 Activity     = autoclass('org.kivy.android.PythonActivity')
                 PowerManager = autoclass('android.os.PowerManager')
                 pm = Activity.mActivity.getSystemService('power')
-                self.wake_lock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, 'EmergencyApp::WakeLock')
+                self.wake_lock = pm.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK, 'EmergencyApp::WakeLock'
+                )
                 self.wake_lock.acquire()
+                start_foreground_service()
             except Exception as e:
                 print(f"ERROR on_start: {e}")
 
