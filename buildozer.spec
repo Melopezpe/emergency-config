@@ -12,17 +12,17 @@ package.domain = org.phonecontrol
 # (str) Source files where the let's go
 source.dir = .
 
-# (list) Source files to include (let it empty if you want to include all files)
+# (list) Source files to include
 source.include_exts = py,png,jpg,kv,atlas,txt
 
 # (list) Application version
 version = 1.0
 
 # (list) Application requirements
-requirements = python3,kivy,pyjnius,android
+requirements = python3,kivy,pyjnius
 
-# (list) Permissions
-android.permissions = CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERVICE,INTERNET,WAKE_LOCK
+# (list) Permissions (AÑADIDO POST_NOTIFICATIONS)
+android.permissions = CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERVICE,INTERNET,WAKE_LOCK,POST_NOTIFICATIONS
 
 # (int) Target Android API
 android.api = 33
@@ -47,5 +47,5 @@ android.accept_sdk_license = True
 # (int) Log level (0 = error only, 1 = info, 2 = debug (default))
 log_level = 2
 
-# (int) Display warning if buildozer is run as root (0 = False, 1 = True)
+# (int) Display warning if buildozer is run as root
 warn_on_root = 0
