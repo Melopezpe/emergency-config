@@ -40,7 +40,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ runner.os }}-v2
+        key: buildozer-global-${{ runner.os }}-v3
         restore-keys: |
           buildozer-global-${{ runner.os }}-
 
@@ -48,11 +48,11 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v2
+        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v3
         restore-keys: |
           buildozer-local-${{ runner.os }}-
 
-    - name: Pre-instalar Android SDK (con reintentos)
+    - name: Pre-instalar Android SDK
       shell: bash
       run: |
         set -e
@@ -66,11 +66,7 @@ jobs:
         URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
         for i in 1 2 3 4 5; do
           echo "Intento $i de descargar commandlinetools..."
-          if curl -fL --retry 5 --retry-delay 5 --retry-all-errors \
-                  -o cmdtools.zip "$URL"; then
-            break
-          fi
-          echo "Fallo en intento $i, esperando 10s..."
+          if curl -fL --retry 5 --retry-delay 5 --retry-all-errors -o cmdtools.zip "$URL"; then break; fi
           sleep 10
         done
         unzip -q cmdtools.zip -d cmdline-tools-tmp
@@ -80,25 +76,17 @@ jobs:
         export PATH="$SDK_DIR/cmdline-tools/latest/bin:$PATH"
         yes | sdkmanager --licenses || true
         sdkmanager "platform-tools" "platforms;android-33" "build-tools;34.0.0" || true
-        echo "SDK pre-instalado en $SDK_DIR"
 
     - name: Crear estructura de SDK compatible con Buildozer 1.5
       shell: bash
       run: |
         set -e
         SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
-        echo "=== Contenido de $SDK_DIR ==="
-        ls -la "$SDK_DIR" || true
         if [ -d "$SDK_DIR/cmdline-tools/latest" ] && [ ! -e "$SDK_DIR/tools" ]; then
-          echo "Creando symlink $SDK_DIR/tools -> $SDK_DIR/cmdline-tools/latest"
           ln -s "$SDK_DIR/cmdline-tools/latest" "$SDK_DIR/tools"
-        elif [ -d "$SDK_DIR/tools" ] && [ ! -L "$SDK_DIR/tools" ]; then
-          echo "$SDK_DIR/tools ya existe (directorio real), no se toca"
         fi
-        echo "=== Verificando sdkmanager ==="
-        ls -la "$SDK_DIR/tools/bin/sdkmanager" || true
 
-    - name: Compilar APK
+    - name: Compilar APK (Buildozer)
       env:
         BUILDOZER_WARN_ON_ROOT: "0"
       run: |
@@ -107,18 +95,27 @@ jobs:
         buildozer android debug 2>&1
       shell: bash
 
-    - name: Aceptar licencias y recompilar si falla
-      if: failure()
-      env:
-        BUILDOZER_WARN_ON_ROOT: "0"
+    # -----------------------------------------------------
+    # AQUI INYECTAMOS EL JAVA Y RECOMPILAMOS EL APK MANUALMENTE
+    # -----------------------------------------------------
+    - name: Inyectar Servicio Java al APK
+      shell: bash
       run: |
-        SDK_PATH=~/.buildozer/android/platform/android-sdk
-        SDKMANAGER="$SDK_PATH/cmdline-tools/latest/bin/sdkmanager"
-        if [ -f "$SDKMANAGER" ]; then
-          yes | "$SDKMANAGER" --licenses
-          yes | "$SDKMANAGER" "build-tools;34.0.0" "platforms;android-33"
+        # 1. Copiamos el Java a la carpeta de construcción de p4a
+        mkdir -p .buildozer/android/app/src/main/java/org/phonecontrol/emergencycontrol
+        cp EmergencyService.java .buildozer/android/app/src/main/java/org/phonecontrol/emergencycontrol/
+
+        # 2. Modificamos el AndroidManifest.xml de la app
+        MANIFEST=".buildozer/android/app/src/main/AndroidManifest.xml"
+        SERVICE_TAG='<service android:name="org.phonecontrol.emergencycontrol.EmergencyService" android:foregroundServiceType="dataSync" android:exported="false" />'
+        if ! grep -q "EmergencyService" "$MANIFEST"; then
+          sed -i "s|</application>|$SERVICE_TAG\n    </application>|g" "$MANIFEST"
         fi
-        buildozer android debug 2>&1
+
+        # 3. Compilamos el APK manualmente usando Gradle
+        cd .buildozer/android/platform/build-arm64-v8a/dists/emergencycontrol
+        ./gradlew assembleDebug
+        cp build/outputs/apk/debug/*.apk ../../../../../bin/
 
     - name: Subir APK
       uses: actions/upload-artifact@v4
@@ -132,13 +129,10 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v1.2
-        name: Emergency Control v1.2
+        tag_name: v2.0
+        name: Emergency Control v2.0
         files: bin/*.apk
         body: |
-          Cambios v1.2:
-          - Foreground Service: la app sigue activa en segundo plano
-          - Permiso POST_NOTIFICATIONS (Android 13+)
-          - Release publicado automaticamente 
+          APK con Foreground Service inyectado manualmente.
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
