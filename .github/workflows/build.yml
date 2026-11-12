@@ -1,5 +1,5 @@
 name: Build APK
-# V2
+# version2.2
 on:
   push:
     branches: [ main ]
@@ -40,7 +40,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ runner.os }}-v4
+        key: buildozer-global-${{ runner.os }}-v5
         restore-keys: |
           buildozer-global-${{ runner.os }}-
 
@@ -48,7 +48,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v4
+        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v5
         restore-keys: |
           buildozer-local-${{ runner.os }}-
 
@@ -150,10 +150,10 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v2.1
-        name: Emergency Control v2.1
+        tag_name: v2.2
+        name: Emergency Control v2.2
         files: bin/*.apk
         body: |
-          APK con Foreground Service inyectado manualmente en la compilación.
+          APK con Foreground Service inyectado en src/main/java.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
