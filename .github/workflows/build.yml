@@ -1,5 +1,5 @@
 name: Build APK
-
+# V2
 on:
   push:
     branches: [ main ]
@@ -40,7 +40,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ runner.os }}-v3
+        key: buildozer-global-${{ runner.os }}-v4
         restore-keys: |
           buildozer-global-${{ runner.os }}-
 
@@ -48,7 +48,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v3
+        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v4
         restore-keys: |
           buildozer-local-${{ runner.os }}-
 
@@ -96,26 +96,53 @@ jobs:
       shell: bash
 
     # -----------------------------------------------------
-    # AQUI INYECTAMOS EL JAVA Y RECOMPILAMOS EL APK MANUALMENTE
+    # INYECCIÓN DEL SERVICIO JAVA Y RECOMPILACIÓN
     # -----------------------------------------------------
     - name: Inyectar Servicio Java al APK
       shell: bash
       run: |
-        # 1. Copiamos el Java a la carpeta de construcción de p4a
-        mkdir -p .buildozer/android/app/src/main/java/org/phonecontrol/emergencycontrol
-        cp EmergencyService.java .buildozer/android/app/src/main/java/org/phonecontrol/emergencycontrol/
+        set -e
+        echo "=== 1. Buscando el AndroidManifest.xml generado ==="
+        MANIFEST=$(find .buildozer -name AndroidManifest.xml | grep -v "\.so" | head -n 1)
+        echo "Manifest encontrado en: $MANIFEST"
+        
+        if [ -z "$MANIFEST" ]; then
+          echo "ERROR: No se encontró el AndroidManifest.xml"
+          exit 1
+        fi
+        
+        DIR=$(dirname "$MANIFEST")
+        echo "Directorio base: $DIR"
 
-        # 2. Modificamos el AndroidManifest.xml de la app
-        MANIFEST=".buildozer/android/app/src/main/AndroidManifest.xml"
+        echo "=== 2. Copiando el archivo Java ==="
+        mkdir -p "$DIR/java/org/phonecontrol/emergencycontrol"
+        cp EmergencyService.java "$DIR/java/org/phonecontrol/emergencycontrol/"
+
+        echo "=== 3. Modificando el Manifest ==="
         SERVICE_TAG='<service android:name="org.phonecontrol.emergencycontrol.EmergencyService" android:foregroundServiceType="dataSync" android:exported="false" />'
+        
         if ! grep -q "EmergencyService" "$MANIFEST"; then
           sed -i "s|</application>|$SERVICE_TAG\n    </application>|g" "$MANIFEST"
+          echo "Servicio inyectado correctamente."
+        else
+          echo "El servicio ya estaba en el Manifest."
         fi
 
-        # 3. Compilamos el APK manualmente usando Gradle
-        cd .buildozer/android/platform/build-arm64-v8a/dists/emergencycontrol
+        echo "=== 4. Buscando la carpeta de Gradle para recompilar ==="
+        GRADLE_DIR=$(find .buildozer -type f -name gradlew | head -n 1 | xargs -r dirname)
+        echo "Carpeta de Gradle encontrada: $GRADLE_DIR"
+
+        if [ -z "$GRADLE_DIR" ]; then
+          echo "ERROR: No se encontró la carpeta de Gradle."
+          exit 1
+        fi
+
+        echo "=== 5. Recompilando el APK ==="
+        cd "$GRADLE_DIR"
         ./gradlew assembleDebug
-        cp build/outputs/apk/debug/*.apk ../../../../../bin/
+        
+        echo "=== 6. Copiando el nuevo APK a la carpeta bin ==="
+        find . -name "*.apk" -exec cp {} /home/runner/work/emergency-config/emergency-config/bin/ \;
 
     - name: Subir APK
       uses: actions/upload-artifact@v4
@@ -129,10 +156,10 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v2.0
-        name: Emergency Control v2.0
+        tag_name: v2.1
+        name: Emergency Control v2.1
         files: bin/*.apk
         body: |
-          APK con Foreground Service inyectado manualmente.
+          APK con Foreground Service inyectado manualmente en la compilación.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
