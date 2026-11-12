@@ -1,5 +1,5 @@
 name: Build APK
-# version2.2
+
 on:
   push:
     branches: [ main ]
@@ -40,7 +40,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ runner.os }}-v5
+        key: buildozer-global-${{ runner.os }}-v7
         restore-keys: |
           buildozer-global-${{ runner.os }}-
 
@@ -48,7 +48,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v5
+        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v7
         restore-keys: |
           buildozer-local-${{ runner.os }}-
 
@@ -95,49 +95,6 @@ jobs:
         buildozer android debug 2>&1
       shell: bash
 
-    # -----------------------------------------------------
-    # INYECCIÓN DEL SERVICIO JAVA Y RECOMPILACIÓN
-    # -----------------------------------------------------
-    - name: Inyectar Servicio Java al APK
-      shell: bash
-      run: |
-        set -e
-        echo "=== 1. Buscando el AndroidManifest.xml generado ==="
-        MANIFEST=$(find .buildozer -name AndroidManifest.xml | grep -v "\.so" | head -n 1)
-        echo "Manifest encontrado en: $MANIFEST"
-        
-        if [ -z "$MANIFEST" ]; then
-          echo "ERROR: No se encontró el AndroidManifest.xml"
-          exit 1
-        fi
-        
-        DIR=$(dirname "$MANIFEST")
-        echo "Directorio base: $DIR"
-
-        echo "=== 2. Copiando el archivo Java ==="
-        mkdir -p "$DIR/src/main/java/org/phonecontrol/emergencycontrol"
-        cp EmergencyService.java "$DIR/src/main/java/org/phonecontrol/emergencycontrol/"
-
-        echo "=== 3. Modificando el Manifest ==="
-        SERVICE_TAG='<service android:name="org.phonecontrol.emergencycontrol.EmergencyService" android:foregroundServiceType="dataSync" android:exported="false" />'
-        
-        if ! grep -q "EmergencyService" "$MANIFEST"; then
-          sed -i "s|</application>|$SERVICE_TAG\n    </application>|g" "$MANIFEST"
-          echo "Servicio inyectado correctamente."
-        else
-          echo "El servicio ya estaba en el Manifest."
-        fi
-
-        echo "=== 4. Entrando a la carpeta de la app ==="
-        cd "$DIR"
-        echo "Carpeta de la app: $(pwd)"
-
-        echo "=== 5. Recompilando el APK ==="
-        ./gradlew assembleDebug
-        
-        echo "=== 6. Copiando el nuevo APK a la carpeta bin ==="
-        find . -name "*.apk" -exec cp {} /home/runner/work/emergency-config/emergency-config/bin/ \;
-
     - name: Subir APK
       uses: actions/upload-artifact@v4
       if: success()
@@ -150,10 +107,10 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v2.2
-        name: Emergency Control v2.2
+        tag_name: v3.1
+        name: Emergency Control v3.1
         files: bin/*.apk
         body: |
-          APK con Foreground Service inyectado en src/main/java.
+          APK con compilación nativa de Java.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
