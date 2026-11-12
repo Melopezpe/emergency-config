@@ -40,7 +40,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ runner.os }}-v7
+        key: buildozer-global-${{ runner.os }}-v9
         restore-keys: |
           buildozer-global-${{ runner.os }}-
 
@@ -48,7 +48,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v7
+        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v9
         restore-keys: |
           buildozer-local-${{ runner.os }}-
 
@@ -107,10 +107,10 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v3.1
-        name: Emergency Control v3.1
+        tag_name: v3.3
+        name: Emergency Control v3.3
         files: bin/*.apk
         body: |
-          APK con compilación nativa de Java.
+          APK con Foreground Service nativo inyectado por Hook.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
