@@ -108,51 +108,28 @@ def send_sms(number, message):
         except Exception as e:
             print(f"ERROR send_sms: {e}")
 
-# --- LA SOLUCIÓN NATIVA EN PYTHON ---
-def start_foreground_notification():
-    if platform != 'android': return
+def start_foreground_service():
+    if platform != 'android':
+        return
     try:
         from jnius import autoclass, cast
         from android import mActivity
-        
-        Context = autoclass('android.content.Context')
         Intent = autoclass('android.content.Intent')
-        PendingIntent = autoclass('android.app.PendingIntent')
-        NotificationChannel = autoclass('android.app.NotificationChannel')
-        NotificationManager = autoclass('android.app.NotificationManager')
-        NotificationBuilder = autoclass('android.app.Notification$Builder')
+        Context = autoclass('android.content.Context')
         BuildVersion = autoclass('android.os.Build$VERSION')
         
+        ServiceClass = autoclass('org.phonecontrol.emergencycontrol.EmergencyService')
         activity = mActivity
         context = cast('android.content.Context', activity)
-        channel_id = 'emergency_channel'
-
-        # 1. Crear el canal (Obligatorio en Android 8+)
-        if BuildVersion.SDK_INT >= 26:
-            nm = cast('android.app.NotificationManager', context.getSystemService(Context.NOTIFICATION_SERVICE))
-            channel = NotificationChannel(channel_id, 'Emergency Control', NotificationManager.IMPORTANCE_LOW)
-            nm.createNotificationChannel(channel)
-
-        # 2. Intent para abrir la app
-        launch_intent = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName())
-        pending_intent = PendingIntent.getActivity(context, 0, launch_intent, PendingIntent.FLAG_IMMUTABLE)
-
-        # 3. Construir la notificación
-        builder = NotificationBuilder(context, channel_id)
-        builder.setContentTitle('Emergency Control')
-        builder.setContentText('Servicio activo en segundo plano')
-        builder.setSmallIcon(activity.getApplicationInfo().icon)
-        builder.setContentIntent(pending_intent)
-        builder.setOngoing(True)
-        notification = builder.build()
-
-        # 4. Arrancar en primer plano (Foreground Service)
-        # En Android 12+ esto debe hacerse rápido después de iniciar la app
-        activity.startForeground(1, notification)
-        print("NOTIFICACION NATIVA INICIADA OK")
+        intent = Intent(context, ServiceClass)
         
+        if BuildVersion.SDK_INT >= 26:
+            context.startForegroundService(intent)
+        else:
+            context.startService(intent)
+        print("FOREGROUND SERVICE: arrancado OK")
     except Exception as e:
-        print(f"ERROR start_foreground: {e}")
+        print(f"ERROR GRAVE foreground_service: {e}")
 
 def poll_server(url):
     global last_id
@@ -240,8 +217,7 @@ class EmergencyApp(App):
                 self.wake_lock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, 'EmergencyApp::WakeLock')
                 self.wake_lock.acquire()
                 
-                # Arrancamos la notificación nativa con un pequeño retraso
-                Clock.schedule_once(lambda dt: start_foreground_notification(), 1)
+                Clock.schedule_once(lambda dt: start_foreground_service(), 2)
             except Exception as e:
                 print(f"ERROR on_start: {e}")
 
