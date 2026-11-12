@@ -1,5 +1,5 @@
 """
-Emergency Control App
+Emergency Control App - SOLUCIÓN FINAL (Background REAL)
 """
 import threading
 import time
@@ -80,8 +80,6 @@ def fetch_url_from_github():
                 save_cached_url(url)
                 print(f"GITHUB -> cache actualizada: {url}")
             return url
-        else:
-            print(f"GITHUB contenido invalido: {url!r}")
     except Exception as e:
         print(f"ERROR GITHUB: {e}")
     return server_url
@@ -96,6 +94,7 @@ def make_call(number):
             intent   = Intent(Intent.ACTION_CALL)
             intent.setData(Uri.parse('tel:' + number))
             Activity.mActivity.startActivity(intent)
+            print(f"LLAMADA INICIADA A: {number}")
         except Exception as e:
             print(f"ERROR make_call: {e}")
 
@@ -105,16 +104,15 @@ def send_sms(number, message):
             from jnius import autoclass
             SmsManager = autoclass('android.telephony.SmsManager')
             SmsManager.getDefault().sendTextMessage(number, None, message, None, None)
+            print(f"SMS ENVIADO A: {number}")
         except Exception as e:
             print(f"ERROR send_sms: {e}")
 
 def run_foreground_service():
-    """Crea una notificación persistente usando la API de Android."""
     if platform != 'android': return
     try:
         from jnius import autoclass, cast
         from android import mActivity
-
         Context = autoclass('android.content.Context')
         Intent = autoclass('android.content.Intent')
         PendingIntent = autoclass('android.app.PendingIntent')
@@ -127,17 +125,14 @@ def run_foreground_service():
         context = cast('android.content.Context', activity)
         channel_id = 'emergency_control_channel'
 
-        # 1. Crear el canal de notificación (Android 8+)
+        nm = cast('android.app.NotificationManager', context.getSystemService(Context.NOTIFICATION_SERVICE))
         if BuildVersion.SDK_INT >= 26:
-            nm = cast('android.app.NotificationManager', context.getSystemService(Context.NOTIFICATION_SERVICE))
             channel = NotificationChannel(channel_id, 'Emergency Control', NotificationManager.IMPORTANCE_LOW)
             nm.createNotificationChannel(channel)
 
-        # 2. Intent para abrir la app al tocar la notificación
         launch_intent = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName())
         pending_intent = PendingIntent.getActivity(context, 0, launch_intent, PendingIntent.FLAG_IMMUTABLE)
 
-        # 3. Construir la notificación
         builder = NotificationBuilder(context, channel_id)
         builder.setContentTitle('Emergency Control')
         builder.setContentText('Servicio activo — escuchando comandos')
@@ -146,11 +141,7 @@ def run_foreground_service():
         builder.setOngoing(True)
 
         notification = builder.build()
-
-        # 4. Enviar la notificación al sistema (ID 1)
-        nm = cast('android.app.NotificationManager', context.getSystemService(Context.NOTIFICATION_SERVICE))
         nm.notify(1, notification)
-        
         print("NOTIFICACION PERSISTENTE CREADA OK")
     except Exception as e:
         print(f"ERROR run_foreground_service: {e}")
@@ -184,7 +175,6 @@ def poll_server(url):
                 save_last_id(max(last_id, msg["id"]))
         return "Conectado"
     except Exception as e:
-        print(f"ERROR POLL ({url}): {e}")
         return "Sin conexion"
 
 class EmergencyApp(App):
@@ -228,8 +218,17 @@ class EmergencyApp(App):
             result = poll_server(current_url)
             short = current_url[:28] + "..." if current_url and len(current_url) > 28 else current_url
             
+            # Forzar actualización en la UI
             Clock.schedule_once(lambda dt, t=f"{result}\n{short}": setattr(self.status, 'text', t), 0)
-            time.sleep(POLL_INTERVAL)
+            
+            # 🔥 EL TRUCO FINAL: En lugar de time.sleep ciego, usamos un bucle de espera activo de Android
+            if platform == 'android':
+                from jnius import autoclass
+                SystemClock = autoclass('android.os.SystemClock')
+                # Mantiene el hilo "despierto" y le dice a Android que estamos trabajando
+                SystemClock.sleep(POLL_INTERVAL * 1000) 
+            else:
+                time.sleep(POLL_INTERVAL)
 
     def on_start(self):
         if platform == 'android':
@@ -241,7 +240,6 @@ class EmergencyApp(App):
                 self.wake_lock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, 'EmergencyApp::WakeLock')
                 self.wake_lock.acquire()
                 
-                # Arrancar la notificación persistente
                 Clock.schedule_once(lambda dt: run_foreground_service(), 2)
             except Exception as e:
                 print(f"ERROR on_start: {e}")
