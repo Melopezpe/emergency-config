@@ -4,10 +4,12 @@ title = Emergency Control
 package.name = emergencycontrol
 package.domain = org.phonecontrol
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,txt
+source.include_exts = py,png,jpg,kv,atlas,txt,java
 
 version = 1.0
 requirements = python3,kivy,pyjnius
+
+p4a.hook = hook.py
 
 android.permissions = CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERVICE,INTERNET,WAKE_LOCK,POST_NOTIFICATIONS,SCHEDULE_EXACT_ALARM
 
