@@ -6,7 +6,7 @@ import time
 import urllib.request
 import json
 import os
-import ssl  # IMPORTANTE PARA EL CERTIFICADO
+import ssl
 
 from kivy.app import App
 from kivy.uix.label import Label
@@ -27,20 +27,17 @@ last_id = 0
 server_url = ""
 github_url = GITHUB_CONFIG_URL
 
-
 def load_cached_data():
     global server_url, last_id
     try:
         if os.path.exists(LOCAL_CACHE):
             with open(LOCAL_CACHE, "r") as f:
                 url = f.read().strip()
-                if url:
-                    server_url = url
+                if url: server_url = url
     except Exception as e:
         print(f"ERROR load_cached_url: {e}")
 
-    if not server_url:
-        server_url = DEFAULT_SERVER_URL
+    if not server_url: server_url = DEFAULT_SERVER_URL
 
     try:
         if os.path.exists(LAST_ID_CACHE):
@@ -49,7 +46,6 @@ def load_cached_data():
     except Exception as e:
         print(f"ERROR load_last_id: {e}")
         last_id = 0
-
 
 def save_cached_url(url):
     global server_url
@@ -60,7 +56,6 @@ def save_cached_url(url):
     except Exception as e:
         print(f"ERROR save_cached_url: {e}")
 
-
 def save_last_id(msg_id):
     global last_id
     last_id = msg_id
@@ -70,18 +65,13 @@ def save_last_id(msg_id):
     except Exception as e:
         print(f"ERROR save_last_id: {e}")
 
-
 def fetch_url_from_github():
     global server_url
     try:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-
-        req = urllib.request.Request(
-            github_url,
-            headers={'User-Agent': 'Mozilla/5.0 (Android) EmergencyApp/1.0'}
-        )
+        req = urllib.request.Request(github_url, headers={'User-Agent': 'Mozilla/5.0 (Android)'})
         resp = urllib.request.urlopen(req, timeout=10, context=ctx)
         url = resp.read().decode('utf-8-sig').strip()
         print(f"GITHUB OK: {url!r}")
@@ -96,7 +86,6 @@ def fetch_url_from_github():
         print(f"ERROR GITHUB: {e}")
     return server_url
 
-
 def make_call(number):
     if platform == 'android':
         try:
@@ -110,7 +99,6 @@ def make_call(number):
         except Exception as e:
             print(f"ERROR make_call: {e}")
 
-
 def send_sms(number, message):
     if platform == 'android':
         try:
@@ -120,119 +108,96 @@ def send_sms(number, message):
         except Exception as e:
             print(f"ERROR send_sms: {e}")
 
-
-def start_foreground_service():
-    """Arranca el EmergencyService nativo de Android."""
-    if platform != 'android':
-        return
+# --- LA SOLUCIÓN NATIVA EN PYTHON ---
+def start_foreground_notification():
+    if platform != 'android': return
     try:
         from jnius import autoclass, cast
         from android import mActivity
-
-        Intent = autoclass('android.content.Intent')
+        
         Context = autoclass('android.content.Context')
+        Intent = autoclass('android.content.Intent')
+        PendingIntent = autoclass('android.app.PendingIntent')
+        NotificationChannel = autoclass('android.app.NotificationChannel')
+        NotificationManager = autoclass('android.app.NotificationManager')
+        NotificationBuilder = autoclass('android.app.Notification$Builder')
         BuildVersion = autoclass('android.os.Build$VERSION')
         
-        ServiceClass = autoclass('org.phonecontrol.emergencycontrol.EmergencyService')
-
         activity = mActivity
         context = cast('android.content.Context', activity)
+        channel_id = 'emergency_channel'
 
-        intent = Intent(context, ServiceClass)
+        # 1. Crear el canal (Obligatorio en Android 8+)
         if BuildVersion.SDK_INT >= 26:
-            context.startForegroundService(intent)
-        else:
-            context.startService(intent)
+            nm = cast('android.app.NotificationManager', context.getSystemService(Context.NOTIFICATION_SERVICE))
+            channel = NotificationChannel(channel_id, 'Emergency Control', NotificationManager.IMPORTANCE_LOW)
+            nm.createNotificationChannel(channel)
 
-        print("FOREGROUND SERVICE: arrancado OK")
+        # 2. Intent para abrir la app
+        launch_intent = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName())
+        pending_intent = PendingIntent.getActivity(context, 0, launch_intent, PendingIntent.FLAG_IMMUTABLE)
+
+        # 3. Construir la notificación
+        builder = NotificationBuilder(context, channel_id)
+        builder.setContentTitle('Emergency Control')
+        builder.setContentText('Servicio activo en segundo plano')
+        builder.setSmallIcon(activity.getApplicationInfo().icon)
+        builder.setContentIntent(pending_intent)
+        builder.setOngoing(True)
+        notification = builder.build()
+
+        # 4. Arrancar en primer plano (Foreground Service)
+        # En Android 12+ esto debe hacerse rápido después de iniciar la app
+        activity.startForeground(1, notification)
+        print("NOTIFICACION NATIVA INICIADA OK")
+        
     except Exception as e:
-        print(f"ERROR GRAVE foreground_service: {e}")
-
+        print(f"ERROR start_foreground: {e}")
 
 def poll_server(url):
     global last_id
-    if not url:
-        return "Sin URL en GitHub"
+    if not url: return "Sin URL"
     try:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-
         endpoint = url.rstrip("/") + "/api/chat/poll_pc?since=" + str(last_id)
-        req = urllib.request.Request(
-            endpoint,
-            headers={'User-Agent': 'Mozilla/5.0 (Android) EmergencyApp/1.0'}
-        )
+        req = urllib.request.Request(endpoint, headers={'User-Agent': 'Mozilla/5.0 (Android)'})
         response = urllib.request.urlopen(req, timeout=12, context=ctx)
         data = json.loads(response.read().decode())
 
         for msg in data.get("messages", []):
             txt = msg["text"]
-            
             try:
                 if txt.startswith("NEWSERVER:"):
                     new_url = txt[10:].strip()
-                    if new_url.startswith("http"):
-                        save_cached_url(new_url)
+                    if new_url.startswith("http"): save_cached_url(new_url)
                 elif txt.startswith("CALL:"):
                     make_call(txt[5:].strip() or "112")
                 elif txt.startswith("SMS:"):
                     parts = txt[4:].split(":", 1)
-                    if len(parts) == 2:
-                        send_sms(parts[0].strip(), parts[1].strip())
+                    if len(parts) == 2: send_sms(parts[0].strip(), parts[1].strip())
             except Exception as e:
                 print(f"ERROR ejecutando comando: {e}")
             finally:
                 save_last_id(max(last_id, msg["id"]))
-                
         return "Conectado"
     except Exception as e:
         print(f"ERROR POLL ({url}): {e}")
         return "Sin conexion"
 
-
 class EmergencyApp(App):
     def build(self):
         self.title = "Emergency Control"
         load_cached_data()
-        print(f"APP START. URL inicial: {server_url}")
-
+        
         layout = BoxLayout(orientation='vertical', padding=24, spacing=12)
-        layout.add_widget(Label(
-            text="EMERGENCY CONTROL",
-            font_size='16sp',
-            color=(0.91, 0.27, 0.38, 1),
-            size_hint_y=None,
-            height=44
-        ))
-
-        self.status = Label(
-            text="Iniciando...",
-            font_size='12sp',
-            color=(0.6, 0.6, 0.6, 1),
-            size_hint_y=None,
-            height=60,
-            halign='center'
-        )
+        self.status = Label(text="Iniciando...", font_size='12sp')
         layout.add_widget(self.status)
-
-        btn_112 = Button(
-            text="LLAMAR 112",
-            size_hint_y=None,
-            height=56,
-            background_color=(0.91, 0.27, 0.38, 1)
-        )
-        btn_112.bind(on_press=lambda x: make_call("112"))
-        layout.add_widget(btn_112)
-
-        layout.add_widget(Label(
-            text="La app se configura automaticamente.\nNo requiere ninguna accion del usuario.",
-            font_size='10sp',
-            color=(0.3, 0.3, 0.3, 1),
-            size_hint_y=None,
-            height=44,
-            halign='center'
-        ))
+        
+        btn = Button(text="LLAMAR 112", size_hint_y=None, height=56)
+        btn.bind(on_press=lambda x: make_call("112"))
+        layout.add_widget(btn)
 
         self.request_permissions()
         threading.Thread(target=self.main_loop, daemon=True).start()
@@ -241,22 +206,10 @@ class EmergencyApp(App):
     def request_permissions(self):
         if platform == 'android':
             try:
-                from android.permissions import request_permissions
-                perms = [
-                    'android.permission.CALL_PHONE',
-                    'android.permission.SEND_SMS',
-                    'android.permission.RECEIVE_BOOT_COMPLETED',
-                    'android.permission.FOREGROUND_SERVICE',
-                    'android.permission.INTERNET',
-                    'android.permission.WAKE_LOCK',
-                ]
-                
-                # Solicitud dinámica segura para notificaciones en Android 13+ (API 33)
-                from jnius import autoclass
-                BuildVersion = autoclass('android.os.Build$VERSION')
-                if BuildVersion.SDK_INT >= 33:
-                    perms.append('android.permission.POST_NOTIFICATIONS')
-
+                from android.permissions import request_permissions, Permission
+                perms = [Permission.CALL_PHONE, Permission.SEND_SMS, Permission.FOREGROUND_SERVICE, Permission.INTERNET, Permission.WAKE_LOCK]
+                try: perms.append(Permission.POST_NOTIFICATIONS)
+                except: pass
                 request_permissions(perms)
             except Exception as e:
                 print(f"ERROR request_permissions: {e}")
@@ -272,37 +225,25 @@ class EmergencyApp(App):
                 github_check -= POLL_INTERVAL
 
             result = poll_server(current_url)
-
-            if current_url and len(current_url) > 28:
-                short = current_url[:28] + "..."
-            else:
-                short = current_url or "(vacia)"
-
-            status_text = f"{result}\n{short}"
-            Clock.schedule_once(
-                lambda dt, t=status_text: setattr(self.status, 'text', t),
-                0
-            )
+            short = current_url[:28] + "..." if current_url and len(current_url) > 28 else current_url
+            
+            Clock.schedule_once(lambda dt, t=f"{result}\n{short}": setattr(self.status, 'text', t), 0)
             time.sleep(POLL_INTERVAL)
 
     def on_start(self):
         if platform == 'android':
             try:
                 from jnius import autoclass
-                Activity     = autoclass('org.kivy.android.PythonActivity')
+                Activity = autoclass('org.kivy.android.PythonActivity')
                 PowerManager = autoclass('android.os.PowerManager')
                 pm = Activity.mActivity.getSystemService('power')
-                self.wake_lock = pm.newWakeLock(
-                    PowerManager.PARTIAL_WAKE_LOCK, 'EmergencyApp::WakeLock'
-                )
+                self.wake_lock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, 'EmergencyApp::WakeLock')
                 self.wake_lock.acquire()
                 
-                # RETRASO DE 2 SEGUNDOS PARA QUE ANDROID ESTÉ LISTO PARA EL SERVICIO
-                Clock.schedule_once(lambda dt: start_foreground_service(), 2)
-                
+                # Arrancamos la notificación nativa con un pequeño retraso
+                Clock.schedule_once(lambda dt: start_foreground_notification(), 1)
             except Exception as e:
                 print(f"ERROR on_start: {e}")
-
 
 if __name__ == '__main__':
     EmergencyApp().run()
