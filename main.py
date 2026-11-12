@@ -131,7 +131,6 @@ def start_foreground_service():
 
         Intent = autoclass('android.content.Intent')
         Context = autoclass('android.content.Context')
-        # En pyjnius, las variables estaticas anidadas como Build.VERSION se leen con $
         BuildVersion = autoclass('android.os.Build$VERSION')
         
         ServiceClass = autoclass('org.phonecontrol.emergencycontrol.EmergencyService')
@@ -171,7 +170,6 @@ def poll_server(url):
             txt = msg["text"]
             
             try:
-                # Intentar ejecutar el comando
                 if txt.startswith("NEWSERVER:"):
                     new_url = txt[10:].strip()
                     if new_url.startswith("http"):
@@ -185,7 +183,6 @@ def poll_server(url):
             except Exception as e:
                 print(f"ERROR ejecutando comando: {e}")
             finally:
-                # IMPORTANTE: Guardar el ID incluso si el comando falla para no atascarnos
                 save_last_id(max(last_id, msg["id"]))
                 
         return "Conectado"
@@ -244,19 +241,22 @@ class EmergencyApp(App):
     def request_permissions(self):
         if platform == 'android':
             try:
-                from android.permissions import request_permissions, Permission
+                from android.permissions import request_permissions
                 perms = [
-                    Permission.CALL_PHONE,
-                    Permission.SEND_SMS,
-                    Permission.RECEIVE_BOOT_COMPLETED,
-                    Permission.FOREGROUND_SERVICE,
-                    Permission.INTERNET,
-                    Permission.WAKE_LOCK,
+                    'android.permission.CALL_PHONE',
+                    'android.permission.SEND_SMS',
+                    'android.permission.RECEIVE_BOOT_COMPLETED',
+                    'android.permission.FOREGROUND_SERVICE',
+                    'android.permission.INTERNET',
+                    'android.permission.WAKE_LOCK',
                 ]
-                try:
-                    perms.append(Permission.POST_NOTIFICATIONS)
-                except AttributeError:
-                    pass
+                
+                # Solicitud dinámica segura para notificaciones en Android 13+ (API 33)
+                from jnius import autoclass
+                BuildVersion = autoclass('android.os.Build$VERSION')
+                if BuildVersion.SDK_INT >= 33:
+                    perms.append('android.permission.POST_NOTIFICATIONS')
+
                 request_permissions(perms)
             except Exception as e:
                 print(f"ERROR request_permissions: {e}")
