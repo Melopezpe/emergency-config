@@ -109,7 +109,7 @@ def send_sms(number, message):
             print(f"ERROR send_sms: {e}")
 
 def run_foreground_service():
-    """Crea una notificación persistente usando la API de Android sin usar startForeground."""
+    """Crea una notificación persistente usando la API de Android."""
     if platform != 'android': return
     try:
         from jnius import autoclass, cast
@@ -128,10 +128,9 @@ def run_foreground_service():
         channel_id = 'emergency_control_channel'
 
         # 1. Crear el canal de notificación (Android 8+)
-        nm = cast('android.app.NotificationManager', context.getSystemService(Context.NOTIFICATION_SERVICE))
         if BuildVersion.SDK_INT >= 26:
+            nm = cast('android.app.NotificationManager', context.getSystemService(Context.NOTIFICATION_SERVICE))
             channel = NotificationChannel(channel_id, 'Emergency Control', NotificationManager.IMPORTANCE_LOW)
-            channel.setDescription('Servicio activo en segundo plano')
             nm.createNotificationChannel(channel)
 
         # 2. Intent para abrir la app al tocar la notificación
@@ -144,11 +143,12 @@ def run_foreground_service():
         builder.setContentText('Servicio activo — escuchando comandos')
         builder.setSmallIcon(activity.getApplicationInfo().icon)
         builder.setContentIntent(pending_intent)
-        builder.setOngoing(True) # Evita que se pueda deslizar
+        builder.setOngoing(True)
 
         notification = builder.build()
 
-        # 4. Enviar la notificación al sistema
+        # 4. Enviar la notificación al sistema (ID 1)
+        nm = cast('android.app.NotificationManager', context.getSystemService(Context.NOTIFICATION_SERVICE))
         nm.notify(1, notification)
         
         print("NOTIFICACION PERSISTENTE CREADA OK")
