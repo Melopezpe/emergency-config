@@ -1,17 +1,23 @@
 [app]
-
 title = Emergency Control
 package.name = emergencycontrol
 package.domain = org.phonecontrol
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,txt,java
+source.include_exts = py,png,jpg,kv,atlas,txt,json,java
 
 version = 1.0
 requirements = python3,kivy,pyjnius
 
-p4a.hook = hook.py
+android.permissions = CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERVICE,INTERNET,WAKE_LOCK,POST_NOTIFICATIONS
 
-android.permissions = CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERVICE,INTERNET,WAKE_LOCK,POST_NOTIFICATIONS,SCHEDULE_EXACT_ALARM
+# Dependencias de Gradle para Firebase
+android.gradle_dependencies = com.google.firebase:firebase-messaging:23.1.2
+
+# AQUÍ LE DECIMOS A BUILDOZER QUE COMPILE EL JAVA
+android.add_src = src/main/java
+
+# DECLARAMOS EL SERVICIO EN EL ANDROIDMANIFEST
+android.services = org.phonecontrol.emergencycontrol.FirebaseService:firebaseMessagingService
 
 android.api = 33
 android.minapi = 21
