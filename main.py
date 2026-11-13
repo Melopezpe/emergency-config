@@ -87,8 +87,8 @@ class EmergencyApp(App):
             request_permissions(perms)
 
     def on_start(self):
-        # Retraso para que la app cargue bien y Firebase esté listo
-        Clock.schedule_once(lambda dt: self.init_fcm(), 1)
+        # Sin retraso. Pedimos el token apenas arranque.
+        self.init_fcm()
 
     def init_fcm(self):
         print("INICIANDO FCM EN LA APP...") # <-- AÑADIR ESTO
