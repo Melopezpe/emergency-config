@@ -93,7 +93,13 @@ jobs:
         mkdir -p ~/.android
         touch ~/.android/repositories.cfg
         buildozer android debug 2>&1
-      shell: bash
+        
+        # Inyectar el google-services.json en la carpeta de compilación de Android
+        echo "Inyectando google-services.json..."
+        find .buildozer -type d -name "app" | while read dir; do
+          cp google-services.json "$dir/" 2>/dev/null || true
+        done
+      shell: bash 
 
     - name: Subir APK
       uses: actions/upload-artifact@v4
