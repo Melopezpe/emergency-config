@@ -91,11 +91,14 @@ class EmergencyApp(App):
         Clock.schedule_once(lambda dt: self.init_fcm(), 1)
 
     def init_fcm(self):
+        print("INICIANDO FCM EN LA APP...") # <-- AÑADIR ESTO
         token = get_fcm_token()
         if token:
             self.status.text = f"✅ Servicio conectado\nToken: {token[:12]}..."
+            print(f"TOKEN MOSTRADO EN PANTALLA: {token}")
         else:
             self.status.text = "⚠️ Error al conectar con Firebase\nRevisa los logs."
+            print("FALLO AL OBTENER EL TOKEN")
 
 if __name__ == '__main__':
     EmergencyApp().run()
