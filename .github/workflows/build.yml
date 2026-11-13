@@ -40,7 +40,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ runner.os }}-firebase-v3
+        key: buildozer-global-${{ runner.os }}-v2
         restore-keys: |
           buildozer-global-${{ runner.os }}-
 
@@ -48,7 +48,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-firebase-v3
+        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v2
         restore-keys: |
           buildozer-local-${{ runner.os }}-
 
@@ -58,14 +58,12 @@ jobs:
         set -e
         SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
         if [ -f "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" ]; then
-          echo "SDK ya cacheado, saltando descarga"
           exit 0
         fi
         mkdir -p "$SDK_DIR"
         cd "$SDK_DIR"
         URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
         for i in 1 2 3 4 5; do
-          echo "Intento $i de descargar commandlinetools..."
           if curl -fL --retry 5 --retry-delay 5 --retry-all-errors -o cmdtools.zip "$URL"; then break; fi
           sleep 10
         done
@@ -93,13 +91,7 @@ jobs:
         mkdir -p ~/.android
         touch ~/.android/repositories.cfg
         buildozer android debug 2>&1
-        
-        # INYECTAR EL JSON EN LA CARPETA DE ANDROID ANTES DE EMPAQUETAR
-        echo "Inyectando google-services.json..."
-        find .buildozer -type d -name "app" | while read dir; do
-          cp google-services.json "$dir/" 2>/dev/null || true
-        done
-      shell: bash
+      shell: true
 
     - name: Subir APK
       uses: actions/upload-artifact@v4
@@ -113,10 +105,10 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v5.0-Firebase-Final
-        name: Emergency Control v5.0 (Final)
+        tag_name: v6.0-Python-Real
+        name: Emergency Control v6.0
         files: bin/*.apk
         body: |
-          APK con Firebase Push integrado correctamente.
+          APK con bucle de alta prioridad Python. Sin necesidad de Firebase.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
