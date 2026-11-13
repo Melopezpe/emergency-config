@@ -88,7 +88,7 @@ class EmergencyApp(App):
 
     def on_start(self):
         # Retraso para que la app cargue bien y Firebase esté listo
-        Clock.schedule_once(lambda dt: self.init_fcm(), 3)
+        Clock.schedule_once(lambda dt: self.init_fcm(), 1)
 
     def init_fcm(self):
         token = get_fcm_token()
