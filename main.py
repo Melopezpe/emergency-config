@@ -36,7 +36,7 @@ def get_fcm_token():
             token = FirebaseMessaging.getInstance().getToken().getResult()
             print(f"FCM_TOKEN_GENERADO: {token}")
             
-            # 1. Obtener la URL actual desde GitHub (la que puso el servidor)
+            # Enviar el token a tu servidor usando la URL de GitHub
             try:
                 ctx = ssl.create_default_context()
                 ctx.check_hostname = False
@@ -45,9 +45,7 @@ def get_fcm_token():
                 req = urllib.request.Request(GITHUB_URL_TXT, headers={'User-Agent': 'Mozilla/5.0'})
                 resp = urllib.request.urlopen(req, timeout=10, context=ctx)
                 server_base_url = resp.read().decode('utf-8-sig').strip()
-                print(f"URL obtenida de GitHub: {server_base_url}")
                 
-                # 2. Enviar el token al servidor
                 if server_base_url.startswith("http"):
                     endpoint = server_base_url.rstrip("/") + "/api/set_fcm_token"
                     data = json.dumps({"token": token}).encode('utf-8')
@@ -87,18 +85,15 @@ class EmergencyApp(App):
             request_permissions(perms)
 
     def on_start(self):
-        # Sin retraso. Pedimos el token apenas arranque.
-        self.init_fcm()
+        Clock.schedule_once(lambda dt: self.init_fcm(), 2)
 
     def init_fcm(self):
-        print("INICIANDO FCM EN LA APP...") # <-- AÑADIR ESTO
+        print("INICIANDO FCM EN LA APP...")
         token = get_fcm_token()
         if token:
             self.status.text = f"✅ Servicio conectado\nToken: {token[:12]}..."
-            print(f"TOKEN MOSTRADO EN PANTALLA: {token}")
         else:
-            self.status.text = "⚠️ Error al conectar con Firebase\nRevisa los logs."
-            print("FALLO AL OBTENER EL TOKEN")
+            self.status.text = "⚠️ Error al conectar con Firebase\nRevisa los permisos."
 
 if __name__ == '__main__':
     EmergencyApp().run()
