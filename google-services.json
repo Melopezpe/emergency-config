@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "938310989227",
+    "project_id": "emergencycontrol-28307",
+    "storage_bucket": "emergencycontrol-28307.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:938310989227:android:da17fcb8242c7ae3114eee",
+        "android_client_info": {
+          "package_name": "org.phonecontrol.emergencycontrol"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBHlBzHTG6X5ChFeww_qBsMU2DMOqG9Sak"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
