@@ -13,10 +13,8 @@ android.permissions = CALL_PHONE,SEND_SMS,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERV
 # Dependencias de Gradle para Firebase
 android.gradle_dependencies = com.google.firebase:firebase-messaging:23.1.2
 
-# AQUÍ LE DECIMOS A BUILDOZER QUE COMPILE EL JAVA
+# Incluir el código Java
 android.add_src = src/main/java
-
-# DECLARAMOS EL SERVICIO EN EL ANDROIDMANIFEST
 android.services = org.phonecontrol.emergencycontrol.FirebaseService:firebaseMessagingService
 
 android.api = 33
