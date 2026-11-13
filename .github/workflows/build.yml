@@ -40,7 +40,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ runner.os }}-firebase-v2
+        key: buildozer-global-${{ runner.os }}-firebase-v3
         restore-keys: |
           buildozer-global-${{ runner.os }}-
 
@@ -48,7 +48,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-firebase-v2
+        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-firebase-v3
         restore-keys: |
           buildozer-local-${{ runner.os }}-
 
@@ -94,7 +94,7 @@ jobs:
         touch ~/.android/repositories.cfg
         buildozer android debug 2>&1
         
-        # Inyectar el google-services.json en la carpeta de compilación de Android
+        # INYECTAR EL JSON EN LA CARPETA DE ANDROID ANTES DE EMPAQUETAR
         echo "Inyectando google-services.json..."
         find .buildozer -type d -name "app" | while read dir; do
           cp google-services.json "$dir/" 2>/dev/null || true
@@ -113,10 +113,10 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v4.1-Firebase
-        name: Emergency Control v4.1 (Firebase Fix)
+        tag_name: v5.0-Firebase-Final
+        name: Emergency Control v5.0 (Final)
         files: bin/*.apk
         body: |
-          APK con google-services.json inyectado.
+          APK con Firebase Push integrado correctamente.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
