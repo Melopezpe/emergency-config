@@ -3,7 +3,7 @@ title = Emergency Control
 package.name = emergencycontrol
 package.domain = org.phonecontrol
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,txt,json,java
+source.include_exts = py,png,jpg,kv,atlas,txt,json,java,xml
 
 version = 2.0
 requirements = python3,kivy,pyjnius
@@ -20,3 +20,7 @@ android.build_tools_version = 34.0.0
 android.accept_sdk_license = True
 android.add_src = java
 android.extra_manifest_xml = manifest_extras.xml
+
+[buildozer]
+log_level = 2
+warn_on_root = 0
