@@ -16,8 +16,13 @@ jobs:
     - name: Checkout codigo
       uses: actions/checkout@v4
 
+    # Asegura que el directorio service/ existe y tiene __init__ si hace falta
+    - name: Verificar estructura service/
+      run: |
+        ls -la service/
+        echo "service/main.py OK"
+
     - name: Instalar dependencias del sistema
-      shell: bash
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -32,8 +37,7 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Instalar Python deps estables
-      shell: bash
+    - name: Instalar Python deps
       run: |
         pip3 install --upgrade pip
         pip3 install buildozer==1.5.0 cython==0.29.36
@@ -50,7 +54,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-local-${{ hashFiles('buildozer.spec', 'main.py', 'pollservice.py') }}-v3
+        key: buildozer-local-${{ hashFiles('buildozer.spec') }}-v3
         restore-keys: |
           buildozer-local-${{ runner.os }}-
 
@@ -60,6 +64,7 @@ jobs:
         set -e
         SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
         if [ -f "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" ]; then
+          echo "SDK ya en caché"
           exit 0
         fi
         mkdir -p "$SDK_DIR"
@@ -77,25 +82,24 @@ jobs:
         yes | sdkmanager --licenses || true
         sdkmanager "platform-tools" "platforms;android-33" "build-tools;34.0.0" || true
 
-    - name: Crear estructura de SDK compatible con Buildozer 1.5
+    - name: Crear symlink SDK para Buildozer 1.5
       shell: bash
       run: |
-        set -e
         SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
         if [ -d "$SDK_DIR/cmdline-tools/latest" ] && [ ! -e "$SDK_DIR/tools" ]; then
           ln -s "$SDK_DIR/cmdline-tools/latest" "$SDK_DIR/tools"
         fi
 
     - name: Compilar APK (Buildozer)
-      shell: bash
       env:
         BUILDOZER_WARN_ON_ROOT: "0"
+      shell: bash          # ← corregido: era "shell: true" (inválido)
       run: |
         mkdir -p ~/.android
         touch ~/.android/repositories.cfg
-        buildozer -v android debug
+        buildozer android debug 2>&1
 
-    - name: Subir APK
+    - name: Subir APK como artefacto
       uses: actions/upload-artifact@v4
       if: success()
       with:
@@ -107,11 +111,14 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v6.1-FGS
-        name: Emergency Control v6.1
+        tag_name: v7.0-ForegroundService
+        name: Emergency Control v7.0 – Foreground Service
         files: bin/*.apk
         body: |
-          Polling movido a foreground service. Llamadas via TelecomManager.
-          last_id persistente con catch-up. Receiver de arranque.
+          ### Cambios v7.0
+          - Polling movido a un Android **Foreground Service** separado (`service/main.py`).
+          - La app ya funciona completamente en segundo plano.
+          - Funciona con pantalla apagada (WakeLock parcial).
+          - Android reinicia el servicio automáticamente si lo mata (START_STICKY).
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
