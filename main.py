@@ -1,12 +1,13 @@
 """
 main.py  –  Interfaz mínima.
-Su único trabajo: iniciar el Foreground Service y dar retroalimentación visual.
-El polling ya NO ocurre aquí; ocurre en service/main.py.
+Su único trabajo: pedir permisos y luego iniciar el Foreground Service.
+El polling ocurre en service/main.py, no aquí.
 """
 from kivy.app import App
 from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
+from kivy.clock import Clock
 from kivy.utils import platform
 
 
@@ -42,49 +43,79 @@ class EmergencyApp(App):
 
     def on_start(self):
         if platform == 'android':
-            self._request_permissions()
-            self._start_service()
+            # Esperar 1 s a que la ventana esté completamente visible
+            # antes de lanzar el diálogo de permisos.
+            Clock.schedule_once(self._ask_permissions, 1)
         else:
-            # Modo escritorio / test
-            self.lbl_status.text = "Ejecutándose en escritorio (sin servicio Android)"
+            self.lbl_status.text = "Escritorio – sin servicio Android"
 
     def on_stop(self):
-        # El servicio sigue vivo aunque el usuario cierre la app.
-        # NO llamamos a service.stop() aquí.
-        pass
+        pass  # El servicio sigue vivo al cerrar la app
 
     # ── Permisos ────────────────────────────────────
 
-    def _request_permissions(self):
+    def _ask_permissions(self, dt):
+        """
+        Pide los permisos peligrosos en tiempo de ejecución.
+        Solo CALL_PHONE y POST_NOTIFICATIONS requieren diálogo;
+        el resto (INTERNET, WAKE_LOCK, FOREGROUND_SERVICE) son normales
+        y se otorgan automáticamente al instalar.
+        Una vez que el usuario responde, _on_permissions_result arranca el servicio.
+        """
         try:
             from android.permissions import request_permissions, Permission
-            request_permissions([
-                Permission.CALL_PHONE,
-                Permission.SEND_SMS,
-                Permission.INTERNET,
-                Permission.WAKE_LOCK,
-                Permission.POST_NOTIFICATIONS,
-                Permission.FOREGROUND_SERVICE,
-            ])
+
+            DANGEROUS = [
+                Permission.CALL_PHONE,        # Marcar números
+                Permission.SEND_SMS,          # SMS
+                Permission.POST_NOTIFICATIONS, # Notificación persistente (Android 13+)
+            ]
+
+            self.lbl_status.text = "Solicitando permisos…\n(acepta todos para que funcione)"
+            request_permissions(DANGEROUS, self._on_permissions_result)
+
         except Exception as e:
-            print(f"[APP] Error permisos: {e}")
+            print(f"[APP] Error pidiendo permisos: {e}")
+            # Si falla el mecanismo de permisos, intentar arrancar igual
+            self._start_service()
+
+    def _on_permissions_result(self, permissions, grants):
+        """
+        Callback que Android llama cuando el usuario responde al diálogo.
+        Aquí ya es seguro arrancar el servicio.
+        """
+        granted = dict(zip(permissions, grants))
+        print(f"[APP] Permisos: {granted}")
+
+        denied = [p for p, g in granted.items() if not g]
+        if denied:
+            names = [p.split('.')[-1] for p in denied]
+            self.lbl_status.text = (
+                f"⚠️  Permisos denegados:\n{', '.join(names)}\n\n"
+                "El servicio puede no funcionar correctamente.\n"
+                "Ve a Ajustes → Aplicaciones → Emergency Control → Permisos."
+            )
+        else:
+            self.lbl_status.text = "✅ Permisos concedidos. Iniciando servicio…"
+
+        # Arrancar el servicio independientemente (funciona para internet/polling
+        # aunque CALL_PHONE sea denegado)
+        self._start_service()
 
     # ── Servicio ────────────────────────────────────
 
     def _start_service(self):
-        """
-        Arranca service/main.py como Android Service independiente.
-        AndroidService lo registra con una notificación persistente
-        y lo mantiene vivo incluso si la app se cierra.
-        """
         try:
             from android import AndroidService
             self.svc = AndroidService(
                 title       = 'Emergency Control',
                 description = 'Monitoreando en segundo plano'
             )
-            self.svc.start('ok')                        # Arranca service/main.py
+            self.svc.start('ok')
 
+            if "✅" not in self.lbl_status.text and "⚠️" not in self.lbl_status.text:
+                # Solo sobreescribir si no hay mensaje de permisos ya
+                pass
             self.lbl_status.text = (
                 "✅  Servicio activo en segundo plano\n\n"
                 "Puedes cerrar esta pantalla.\n"
