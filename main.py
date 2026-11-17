@@ -1,108 +1,155 @@
 """
-main.py  –  Interfaz mínima.
-Su único trabajo: pedir permisos y luego iniciar el Foreground Service.
-El polling ocurre en service/main.py, no aquí.
+main.py – Diagnóstico + permisos robustos + servicio.
 """
 from kivy.app import App
 from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
+from kivy.uix.scrollview import ScrollView
 from kivy.clock import Clock
 from kivy.utils import platform
+
+LOG = []
+
+def log(msg):
+    print(msg)
+    LOG.append(msg)
 
 
 class EmergencyApp(App):
 
     def build(self):
         self.title = "Emergency Control"
+        root = BoxLayout(orientation='vertical', padding=16, spacing=10)
 
-        root = BoxLayout(orientation='vertical', padding=32, spacing=16)
-
-        self.lbl_status = Label(
+        scroll = ScrollView(size_hint=(1, 0.75))
+        self.lbl = Label(
             text="Iniciando…",
-            font_size='15sp',
-            halign='center',
-            valign='middle'
+            font_size='13sp',
+            halign='left',
+            valign='top',
+            size_hint_y=None
         )
-        self.lbl_status.bind(size=self.lbl_status.setter('text_size'))
-        root.add_widget(self.lbl_status)
+        self.lbl.bind(texture_size=lambda i, v: setattr(i, 'height', v[1]))
+        self.lbl.bind(width=lambda i, v: setattr(i, 'text_size', (v, None)))
+        scroll.add_widget(self.lbl)
+        root.add_widget(scroll)
 
-        btn = Button(
+        btn112 = Button(
             text="LLAMAR 112",
-            size_hint_y=None,
-            height=64,
-            background_color=(0.91, 0.27, 0.38, 1),
-            font_size='16sp'
+            size_hint_y=None, height=60,
+            background_color=(0.85, 0.15, 0.25, 1)
         )
-        btn.bind(on_press=lambda _: self._call("112"))
-        root.add_widget(btn)
+        btn112.bind(on_press=lambda _: self._call("112"))
+        root.add_widget(btn112)
+
+        btn_perm = Button(
+            text="🔑 Conceder permisos manualmente",
+            size_hint_y=None, height=50,
+            background_color=(0.2, 0.5, 0.9, 1)
+        )
+        btn_perm.bind(on_press=lambda _: self._open_app_settings())
+        root.add_widget(btn_perm)
 
         return root
 
-    # ── Ciclo de vida ───────────────────────────────
+    def _ui(self, msg):
+        self.lbl.text = msg
+
+    # ── Ciclo de vida ───────────────────────────────────────
 
     def on_start(self):
+        log(f"[APP] platform={platform}")
         if platform == 'android':
-            # Esperar 1 s a que la ventana esté completamente visible
-            # antes de lanzar el diálogo de permisos.
-            Clock.schedule_once(self._ask_permissions, 1)
+            Clock.schedule_once(self._check_and_request, 1.5)
         else:
-            self.lbl_status.text = "Escritorio – sin servicio Android"
+            self._ui("Escritorio: sin permisos Android")
 
-    def on_stop(self):
-        pass  # El servicio sigue vivo al cerrar la app
+    # ── Permisos ────────────────────────────────────────────
 
-    # ── Permisos ────────────────────────────────────
-
-    def _ask_permissions(self, dt):
-        """
-        Pide los permisos peligrosos en tiempo de ejecución.
-        Solo CALL_PHONE y POST_NOTIFICATIONS requieren diálogo;
-        el resto (INTERNET, WAKE_LOCK, FOREGROUND_SERVICE) son normales
-        y se otorgan automáticamente al instalar.
-        Una vez que el usuario responde, _on_permissions_result arranca el servicio.
-        """
+    def _check_and_request(self, dt):
         try:
-            from android.permissions import request_permissions, Permission
+            from android.permissions import (
+                request_permissions, check_permission, Permission
+            )
 
-            DANGEROUS = [
-                Permission.CALL_PHONE,        # Marcar números
-                Permission.SEND_SMS,          # SMS
-                Permission.POST_NOTIFICATIONS, # Notificación persistente (Android 13+)
-            ]
+            # Solo pedir los PELIGROSOS que Android muestra en diálogo
+            candidates = {
+                'CALL_PHONE':        Permission.CALL_PHONE,
+                'SEND_SMS':          Permission.SEND_SMS,
+            }
+            # POST_NOTIFICATIONS solo existe en Android 13+
+            try:
+                candidates['POST_NOTIFICATIONS'] = Permission.POST_NOTIFICATIONS
+            except AttributeError:
+                log("[PERM] POST_NOTIFICATIONS no disponible (Android < 13)")
 
-            self.lbl_status.text = "Solicitando permisos…\n(acepta todos para que funcione)"
-            request_permissions(DANGEROUS, self._on_permissions_result)
+            # Ver cuáles ya están concedidos
+            status = {name: check_permission(p) for name, p in candidates.items()}
+            log(f"[PERM] Estado actual: {status}")
+
+            needed = [p for name, p in candidates.items() if not status[name]]
+            granted_names = [n for n, g in status.items() if g]
+            denied_names  = [n for n, g in status.items() if not g]
+
+            if not needed:
+                self._ui("✅ Todos los permisos ya concedidos.\nArrancando servicio…")
+                log("[PERM] Todo concedido, arrancando servicio")
+                self._start_service()
+                return
+
+            self._ui(
+                f"✅ Concedidos: {', '.join(granted_names) or 'ninguno'}\n"
+                f"⏳ Solicitando: {', '.join(denied_names)}\n\n"
+                "Acepta el diálogo que aparecerá…"
+            )
+            log(f"[PERM] Pidiendo: {denied_names}")
+            request_permissions(needed, self._on_result)
 
         except Exception as e:
-            print(f"[APP] Error pidiendo permisos: {e}")
-            # Si falla el mecanismo de permisos, intentar arrancar igual
+            log(f"[PERM] Excepción: {e}")
+            self._ui(f"Error en permisos:\n{e}\n\nArrancando servicio de todas formas…")
             self._start_service()
 
-    def _on_permissions_result(self, permissions, grants):
-        """
-        Callback que Android llama cuando el usuario responde al diálogo.
-        Aquí ya es seguro arrancar el servicio.
-        """
-        granted = dict(zip(permissions, grants))
-        print(f"[APP] Permisos: {granted}")
+    def _on_result(self, permissions, grants):
+        result = dict(zip(permissions, grants))
+        log(f"[PERM] Resultado: {result}")
 
-        denied = [p for p, g in granted.items() if not g]
+        denied = [p.split('.')[-1] for p, g in result.items() if not g]
+
         if denied:
-            names = [p.split('.')[-1] for p in denied]
-            self.lbl_status.text = (
-                f"⚠️  Permisos denegados:\n{', '.join(names)}\n\n"
-                "El servicio puede no funcionar correctamente.\n"
-                "Ve a Ajustes → Aplicaciones → Emergency Control → Permisos."
+            self._ui(
+                f"⚠️ Denegados: {', '.join(denied)}\n\n"
+                "Pulsa el botón azul para ir a Ajustes\n"
+                "y concederlos manualmente.\n\n"
+                "El servicio arrancará de todas formas\n"
+                "(sin CALL_PHONE no podrá llamar)."
             )
         else:
-            self.lbl_status.text = "✅ Permisos concedidos. Iniciando servicio…"
+            self._ui("✅ Permisos concedidos. Arrancando servicio…")
 
-        # Arrancar el servicio independientemente (funciona para internet/polling
-        # aunque CALL_PHONE sea denegado)
         self._start_service()
 
-    # ── Servicio ────────────────────────────────────
+    def _open_app_settings(self):
+        """Abre la pantalla de permisos de esta app en Ajustes del sistema."""
+        try:
+            from jnius import autoclass
+            Intent   = autoclass('android.content.Intent')
+            Uri      = autoclass('android.net.Uri')
+            Settings = autoclass('android.provider.Settings')
+            Activity = autoclass('org.kivy.android.PythonActivity')
+
+            intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            intent.setData(Uri.parse(
+                'package:' + Activity.mActivity.getPackageName()
+            ))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            Activity.mActivity.startActivity(intent)
+        except Exception as e:
+            log(f"[SETTINGS] Error: {e}")
+            self._ui(f"No se pudo abrir Ajustes:\n{e}")
+
+    # ── Servicio ────────────────────────────────────────────
 
     def _start_service(self):
         try:
@@ -112,24 +159,17 @@ class EmergencyApp(App):
                 description = 'Monitoreando en segundo plano'
             )
             self.svc.start('ok')
-
-            if "✅" not in self.lbl_status.text and "⚠️" not in self.lbl_status.text:
-                # Solo sobreescribir si no hay mensaje de permisos ya
-                pass
-            self.lbl_status.text = (
-                "✅  Servicio activo en segundo plano\n\n"
-                "Puedes cerrar esta pantalla.\n"
-                "El servicio seguirá escuchando\n"
-                "y realizará la llamada automáticamente."
-            )
-            print("[APP] Servicio iniciado")
+            log("[APP] Servicio arrancado")
+            # Añadir confirmación sin borrar el mensaje de permisos
+            current = self.lbl.text
+            self._ui(current + "\n\n✅ Servicio activo.\nPuedes cerrar esta pantalla.")
         except Exception as e:
-            self.lbl_status.text = f"⚠️  Error iniciando servicio:\n{e}"
-            print(f"[APP] Error _start_service: {e}")
+            log(f"[APP] Error servicio: {e}")
+            self._ui(self.lbl.text + f"\n\n⚠️ Error servicio:\n{e}")
 
-    # ── Llamada manual ──────────────────────────────
+    # ── Llamada manual ───────────────────────────────────────
 
-    def _call(self, number: str):
+    def _call(self, number):
         if platform == 'android':
             try:
                 from jnius import autoclass
@@ -140,7 +180,10 @@ class EmergencyApp(App):
                 intent.setData(Uri.parse('tel:' + number))
                 Activity.mActivity.startActivity(intent)
             except Exception as e:
-                print(f"[APP] Error llamada: {e}")
+                log(f"[CALL] Error: {e}")
+
+    def on_stop(self):
+        pass
 
 
 if __name__ == '__main__':
