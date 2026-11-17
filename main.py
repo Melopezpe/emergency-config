@@ -80,8 +80,8 @@ class EmergencyApp(App):
         try:
             from android import AndroidService
             self.svc = AndroidService(
-                title   = 'Emergency Control',          # Título notif
-                message = 'Monitoreando en segundo plano'  # Subtítulo
+                title       = 'Emergency Control',
+                description = 'Monitoreando en segundo plano'
             )
             self.svc.start('ok')                        # Arranca service/main.py
 
