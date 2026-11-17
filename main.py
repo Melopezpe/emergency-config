@@ -33,30 +33,33 @@ class EmergencyApp(App):
 
     def start_service(self):
         try:
-            from jnius import autoclass
-            Activity = autoclass('org.kivy.android.PythonActivity')
-            Intent = autoclass('android.content.Intent')
-            ServiceClass = autoclass('org.phonecontrol.emergencycontrol.ServiceEmergencyService')
+            # Usamos la clase oficial de Kivy para arrancar el servicio
+            from android import AndroidService
+            self.svc = AndroidService(
+                title='Emergency Control',
+                description='Monitoreando comandos de emergencia'
+            )
+            # Arranca el servicio que está en service/main.py
+            self.svc.start('ok')
             
-            # Arrancar el servicio de Android de forma nativa
-            intent = Intent(Activity.mActivity, ServiceClass)
-            Activity.mActivity.startService(intent)
-            
-            self.status.text = "✅ Servicio iniciado\nPuedes cerrar la app."
+            self.status.text = "✅ Servicio iniciado\nPuedes minimizar o cerrar."
             print("SERVICIO ARRANCADO OK")
         except Exception as e:
-            self.status.text = f"Error: {e}"
+            self.status.text = f"Error al iniciar servicio:\n{e}"
             print(f"ERROR start_service: {e}")
 
     def _call(self, number):
         if platform == 'android':
-            from jnius import autoclass
-            Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
-            Activity = autoclass('org.kivy.android.PythonActivity')
-            intent = Intent(Intent.ACTION_CALL)
-            intent.setData(Uri.parse('tel:' + number))
-            Activity.mActivity.startActivity(intent)
+            try:
+                from jnius import autoclass
+                Intent = autoclass('android.content.Intent')
+                Uri = autoclass('android.net.Uri')
+                Activity = autoclass('org.kivy.android.PythonActivity')
+                intent = Intent(Intent.ACTION_CALL)
+                intent.setData(Uri.parse('tel:' + number))
+                Activity.mActivity.startActivity(intent)
+            except Exception as e:
+                print(f"ERROR _call: {e}")
 
 if __name__ == '__main__':
     EmergencyApp().run()
