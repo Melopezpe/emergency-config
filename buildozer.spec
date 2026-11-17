@@ -8,10 +8,10 @@ source.include_exts = py,png,jpg,kv,atlas,txt,json
 version = 2.0
 requirements = python3,kivy,pyjnius,android
 
-# Servicio de fondo — foreground = START_STICKY + ForegroundService
-services = EmergencyService:./service/main.py:foreground
+# 👇 ESTA ES LA LÍNEA CORRECTA (usa android.services)
+android.services = EmergencyService:./service/main.py:foreground
 
-# TODOS los permisos en UNA sola línea — buildozer no soporta multilínea aquí
+# Permisos
 android.permissions = CALL_PHONE,SEND_SMS,INTERNET,WAKE_LOCK,RECEIVE_BOOT_COMPLETED,FOREGROUND_SERVICE,POST_NOTIFICATIONS,SCHEDULE_EXACT_ALARM
 
 android.api = 33
@@ -20,8 +20,6 @@ android.ndk = 25c
 android.archs = arm64-v8a
 android.build_tools_version = 34.0.0
 android.accept_sdk_license = True
-
-android.add_src = service
 
 [buildozer]
 log_level = 2
