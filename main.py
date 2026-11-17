@@ -1,190 +1,193 @@
 """
-main.py – Diagnóstico + permisos robustos + servicio.
+service/main.py  –  Proceso Android Service separado.
+Corre aunque la app esté cerrada. No importa Kivy (sin UI).
 """
-from kivy.app import App
-from kivy.uix.label import Label
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
-from kivy.uix.scrollview import ScrollView
-from kivy.clock import Clock
-from kivy.utils import platform
+import time
+import ssl
+import json
+import urllib.request
 
-LOG = []
+GITHUB_URL_TXT  = "https://raw.githubusercontent.com/Melopezpe/emergency-config/main/url.txt"
+DEFAULT_SERVER_URL = "https://bases-european-groups-room.trycloudflare.com"
 
-def log(msg):
-    print(msg)
-    LOG.append(msg)
+last_id = 0
 
 
-class EmergencyApp(App):
+# ──────────────────────────────────────────────
+# Android helpers
+# ──────────────────────────────────────────────
 
-    def build(self):
-        self.title = "Emergency Control"
-        root = BoxLayout(orientation='vertical', padding=16, spacing=10)
+def get_service():
+    """Devuelve el contexto del Service de Android."""
+    from jnius import autoclass
+    return autoclass('org.kivy.android.PythonService').mService
 
-        scroll = ScrollView(size_hint=(1, 0.75))
-        self.lbl = Label(
-            text="Iniciando…",
-            font_size='13sp',
-            halign='left',
-            valign='top',
-            size_hint_y=None
+
+def setup_foreground():
+    """
+    Promueve este proceso a Foreground Service.
+    Con esto Android NO puede matarlo por memoria ni batería.
+    Aparece una notificación persistente (obligatoria en Android 8+).
+    """
+    try:
+        from jnius import autoclass
+        service = get_service()
+
+        NotificationChannel = autoclass('android.app.NotificationChannel')
+        NotifManager       = autoclass('android.app.NotificationManager')
+        Builder            = autoclass('android.app.Notification$Builder')
+        Context            = autoclass('android.content.Context')
+
+        CHANNEL_ID = "emergency_fg"
+
+        # Crear canal de notificación (Android 8+)
+        nm = service.getSystemService(Context.NOTIFICATION_SERVICE)
+        ch = NotificationChannel(
+            CHANNEL_ID,
+            "Servicio de Emergencia",
+            NotifManager.IMPORTANCE_LOW          # Sin sonido
         )
-        self.lbl.bind(texture_size=lambda i, v: setattr(i, 'height', v[1]))
-        self.lbl.bind(width=lambda i, v: setattr(i, 'text_size', (v, None)))
-        scroll.add_widget(self.lbl)
-        root.add_widget(scroll)
+        ch.setDescription("Monitorea comandos de emergencia")
+        nm.createNotificationChannel(ch)
 
-        btn112 = Button(
-            text="LLAMAR 112",
-            size_hint_y=None, height=60,
-            background_color=(0.85, 0.15, 0.25, 1)
-        )
-        btn112.bind(on_press=lambda _: self._call("112"))
-        root.add_widget(btn112)
+        # Notificación persistente mínima
+        notif = (Builder(service, CHANNEL_ID)
+                 .setContentTitle("Emergency Control")
+                 .setContentText("Escuchando comandos…")
+                 .setSmallIcon(service.getApplicationInfo().icon)
+                 .setOngoing(True)               # No se puede descartar
+                 .build())
 
-        btn_perm = Button(
-            text="🔑 Conceder permisos manualmente",
-            size_hint_y=None, height=50,
-            background_color=(0.2, 0.5, 0.9, 1)
-        )
-        btn_perm.bind(on_press=lambda _: self._open_app_settings())
-        root.add_widget(btn_perm)
+        service.startForeground(1, notif)        # ← clave: protege el servicio
+        print("[SVC] Foreground service activo")
+    except Exception as e:
+        print(f"[SVC] ERROR setup_foreground: {e}")
 
-        return root
 
-    def _ui(self, msg):
-        self.lbl.text = msg
+def acquire_wakelock():
+    """
+    WakeLock parcial: mantiene la CPU activa aunque la pantalla esté apagada.
+    Sin esto Samsung / Xiaomi / Huawei pueden congelar el hilo en 10-30 s.
+    """
+    try:
+        from jnius import autoclass
+        service = get_service()
+        PM = autoclass('android.os.PowerManager')
+        pm = service.getSystemService('power')
+        wl = pm.newWakeLock(PM.PARTIAL_WAKE_LOCK, 'EmergencyApp::WakeLock')
+        wl.acquire()
+        print("[SVC] WakeLock adquirido")
+        return wl
+    except Exception as e:
+        print(f"[SVC] ERROR WakeLock: {e}")
+        return None
 
-    # ── Ciclo de vida ───────────────────────────────────────
 
-    def on_start(self):
-        log(f"[APP] platform={platform}")
-        if platform == 'android':
-            Clock.schedule_once(self._check_and_request, 1.5)
-        else:
-            self._ui("Escritorio: sin permisos Android")
+# ──────────────────────────────────────────────
+# Lógica de red
+# ──────────────────────────────────────────────
 
-    # ── Permisos ────────────────────────────────────────────
+def _ssl_ctx():
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode    = ssl.CERT_NONE
+    return ctx
 
-    def _check_and_request(self, dt):
-        try:
-            from android.permissions import (
-                request_permissions, check_permission, Permission
-            )
 
-            # Solo pedir los PELIGROSOS que Android muestra en diálogo
-            candidates = {
-                'CALL_PHONE':        Permission.CALL_PHONE,
-                'SEND_SMS':          Permission.SEND_SMS,
-            }
-            # POST_NOTIFICATIONS solo existe en Android 13+
-            try:
-                candidates['POST_NOTIFICATIONS'] = Permission.POST_NOTIFICATIONS
-            except AttributeError:
-                log("[PERM] POST_NOTIFICATIONS no disponible (Android < 13)")
-
-            # Ver cuáles ya están concedidos
-            status = {name: check_permission(p) for name, p in candidates.items()}
-            log(f"[PERM] Estado actual: {status}")
-
-            needed = [p for name, p in candidates.items() if not status[name]]
-            granted_names = [n for n, g in status.items() if g]
-            denied_names  = [n for n, g in status.items() if not g]
-
-            if not needed:
-                self._ui("✅ Todos los permisos ya concedidos.\nArrancando servicio…")
-                log("[PERM] Todo concedido, arrancando servicio")
-                self._start_service()
-                return
-
-            self._ui(
-                f"✅ Concedidos: {', '.join(granted_names) or 'ninguno'}\n"
-                f"⏳ Solicitando: {', '.join(denied_names)}\n\n"
-                "Acepta el diálogo que aparecerá…"
-            )
-            log(f"[PERM] Pidiendo: {denied_names}")
-            request_permissions(needed, self._on_result)
-
-        except Exception as e:
-            log(f"[PERM] Excepción: {e}")
-            self._ui(f"Error en permisos:\n{e}\n\nArrancando servicio de todas formas…")
-            self._start_service()
-
-    def _on_result(self, permissions, grants):
-        result = dict(zip(permissions, grants))
-        log(f"[PERM] Resultado: {result}")
-
-        denied = [p.split('.')[-1] for p, g in result.items() if not g]
-
-        if denied:
-            self._ui(
-                f"⚠️ Denegados: {', '.join(denied)}\n\n"
-                "Pulsa el botón azul para ir a Ajustes\n"
-                "y concederlos manualmente.\n\n"
-                "El servicio arrancará de todas formas\n"
-                "(sin CALL_PHONE no podrá llamar)."
-            )
-        else:
-            self._ui("✅ Permisos concedidos. Arrancando servicio…")
-
-        self._start_service()
-
-    def _open_app_settings(self):
-        """Abre la pantalla de permisos de esta app en Ajustes del sistema."""
-        try:
-            from jnius import autoclass
-            Intent   = autoclass('android.content.Intent')
-            Uri      = autoclass('android.net.Uri')
-            Settings = autoclass('android.provider.Settings')
-            Activity = autoclass('org.kivy.android.PythonActivity')
-
-            intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-            intent.setData(Uri.parse(
-                'package:' + Activity.mActivity.getPackageName()
-            ))
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            Activity.mActivity.startActivity(intent)
-        except Exception as e:
-            log(f"[SETTINGS] Error: {e}")
-            self._ui(f"No se pudo abrir Ajustes:\n{e}")
-
-    # ── Servicio ────────────────────────────────────────────
-
-    def _start_service(self):
-        try:
-            from android import AndroidService
-            self.svc = AndroidService(
-                title       = 'Emergency Control',
-                description = 'Monitoreando en segundo plano'
-            )
-            self.svc.start('ok')
-            log("[APP] Servicio arrancado")
-            # Añadir confirmación sin borrar el mensaje de permisos
-            current = self.lbl.text
-            self._ui(current + "\n\n✅ Servicio activo.\nPuedes cerrar esta pantalla.")
-        except Exception as e:
-            log(f"[APP] Error servicio: {e}")
-            self._ui(self.lbl.text + f"\n\n⚠️ Error servicio:\n{e}")
-
-    # ── Llamada manual ───────────────────────────────────────
-
-    def _call(self, number):
-        if platform == 'android':
-            try:
-                from jnius import autoclass
-                Intent   = autoclass('android.content.Intent')
-                Uri      = autoclass('android.net.Uri')
-                Activity = autoclass('org.kivy.android.PythonActivity')
-                intent   = Intent(Intent.ACTION_CALL)
-                intent.setData(Uri.parse('tel:' + number))
-                Activity.mActivity.startActivity(intent)
-            except Exception as e:
-                log(f"[CALL] Error: {e}")
-
-    def on_stop(self):
+def get_server_url():
+    try:
+        req  = urllib.request.Request(GITHUB_URL_TXT,
+                                      headers={'User-Agent': 'Mozilla/5.0'})
+        resp = urllib.request.urlopen(req, timeout=10, context=_ssl_ctx())
+        url  = resp.read().decode('utf-8-sig').strip()
+        if url.startswith("http"):
+            return url
+    except Exception:
         pass
+    return DEFAULT_SERVER_URL
 
+
+def poll_server(url):
+    global last_id
+    try:
+        endpoint = url.rstrip("/") + "/api/chat/poll_pc?since=" + str(last_id)
+        req      = urllib.request.Request(endpoint,
+                                          headers={'User-Agent': 'Mozilla/5.0'})
+        response = urllib.request.urlopen(req, timeout=10, context=_ssl_ctx())
+        data     = json.loads(response.read().decode())
+
+        for msg in data.get("messages", []):
+            last_id = max(last_id, msg["id"])
+            handle_command(msg["text"])
+
+        return True
+    except Exception:
+        return False
+
+
+# ──────────────────────────────────────────────
+# Ejecución de comandos
+# ──────────────────────────────────────────────
+
+def handle_command(txt: str):
+    if txt.startswith("CALL:"):
+        number = txt[5:].strip() or "112"
+        make_call(number)
+
+
+def make_call(number: str):
+    """
+    Realiza la llamada desde el contexto del Service.
+    FLAG_ACTIVITY_NEW_TASK es obligatorio fuera de una Activity.
+    """
+    try:
+        from jnius import autoclass
+        service  = get_service()
+        Intent   = autoclass('android.content.Intent')
+        Uri      = autoclass('android.net.Uri')
+
+        intent = Intent(Intent.ACTION_CALL)
+        intent.setData(Uri.parse('tel:' + number))
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        service.startActivity(intent)
+        print(f"[SVC] LLAMADA → {number}")
+    except Exception as e:
+        print(f"[SVC] ERROR make_call: {e}")
+
+
+# ──────────────────────────────────────────────
+# Entry point del servicio
+# ──────────────────────────────────────────────
 
 if __name__ == '__main__':
-    EmergencyApp().run()
+    print("[SVC] === Emergency Service arrancando ===")
+
+    setup_foreground()
+    acquire_wakelock()
+
+    server_url      = get_server_url()
+    url_ttl         = 0          # refresca URL cada 60 ciclos (~5 min)
+    consecutive_err = 0
+
+    while True:
+        try:
+            # Refrescar URL periódicamente por si cambia el túnel
+            if url_ttl <= 0:
+                server_url = get_server_url()
+                url_ttl    = 60
+            url_ttl -= 1
+
+            ok = poll_server(server_url)
+            if ok:
+                consecutive_err = 0
+            else:
+                consecutive_err += 1
+                # Tras 5 fallos seguidos forzar recarga de URL
+                if consecutive_err >= 5:
+                    server_url      = get_server_url()
+                    consecutive_err = 0
+
+        except Exception as e:
+            print(f"[SVC] Error en ciclo: {e}")
+
+        time.sleep(5)
