@@ -93,11 +93,19 @@ jobs:
     - name: Compilar APK (Buildozer)
       env:
         BUILDOZER_WARN_ON_ROOT: "0"
-      shell: bash          # ← corregido: era "shell: true" (inválido)
       run: |
         mkdir -p ~/.android
         touch ~/.android/repositories.cfg
         buildozer android debug 2>&1
+        
+        # FORZAR PERMISO FOREGROUND_SERVICE EN EL MANIFEST
+        echo "Inyectando permiso FOREGROUND_SERVICE en el Manifest..."
+        find .buildozer -type f -name "AndroidManifest.xml" | while read manifest; do
+          if ! grep -q "android.permission.FOREGROUND_SERVICE" "$manifest"; then
+            sed -i 's|<application|<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n<application|g' "$manifest"
+          fi
+        done
+      shell: bash
 
     - name: Subir APK como artefacto
       uses: actions/upload-artifact@v4
