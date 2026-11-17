@@ -8,7 +8,7 @@ source.include_exts = py,png,jpg,kv,atlas,txt,json
 version = 2.0
 requirements = python3,kivy,pyjnius,android
 
-# 👇 ESTA ES LA LÍNEA CORRECTA (usa android.services)
+# 👇 Servicio correctamente declarado
 android.services = EmergencyService:./service/main.py:foreground
 
 # Permisos
