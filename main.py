@@ -4,17 +4,16 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.clock import Clock
 from kivy.utils import platform
+import os
 
 class EmergencyApp(App):
     def build(self):
         layout = BoxLayout(orientation='vertical', padding=24, spacing=12)
         self.status = Label(text="Iniciando...", font_size='14sp', halign='center')
         layout.add_widget(self.status)
-        
         btn = Button(text="LLAMAR 112", size_hint_y=None, height=60, background_color=(0.85, 0.15, 0.25, 1))
         btn.bind(on_press=lambda x: self._call("112"))
         layout.add_widget(btn)
-        
         self.request_permissions()
         return layout
 
@@ -35,31 +34,25 @@ class EmergencyApp(App):
     def start_service(self):
         try:
             from android import AndroidService
-            self.svc = AndroidService(title='Emergency Control', description='Monitoreando comandos...')
+            self.svc = AndroidService(title='Emergency Control', description='Monitoreando...')
             self.svc.start('ok')
             self.status.text = "✅ Servicio activo"
         except Exception as e:
             self.status.text = f"Error servicio:\n{e}"
 
     def check_incoming_call(self):
-        """Revisa si hay un archivo con una llamada pendiente."""
         try:
-            import os
-            archivo = '/data/local/tmp/llamada_pendiente.txt'
-            
-            if os.path.exists(archivo):
-                with open(archivo, 'r') as f:
+            from jnius import autoclass
+            Activity = autoclass('org.kivy.android.PythonActivity')
+            app_dir = Activity.mActivity.getFilesDir().getAbsolutePath()
+            filepath = os.path.join(app_dir, "llamada_pendiente.txt")
+            if os.path.exists(filepath):
+                with open(filepath, 'r') as f:
                     number = f.read().strip()
-                
                 if number:
                     self.status.text = f"📞 Llamando al {number}..."
-                    print(f"APP: LLAMADA PENDIENTE -> {number}")
                     self._call(number)
-                
-                # Borrar el archivo para que no se repita
-                os.remove(archivo)
-            else:
-                print("APP: No hay llamada pendiente.")
+                os.remove(filepath)
         except Exception as e:
             print(f"ERROR check_incoming_call: {e}")
 
@@ -67,10 +60,10 @@ class EmergencyApp(App):
         if platform == 'android':
             try:
                 from jnius import autoclass
-                Intent   = autoclass('android.content.Intent')
-                Uri      = autoclass('android.net.Uri')
+                Intent = autoclass('android.content.Intent')
+                Uri = autoclass('android.net.Uri')
                 Activity = autoclass('org.kivy.android.PythonActivity')
-                intent   = Intent(Intent.ACTION_CALL)
+                intent = Intent(Intent.ACTION_CALL)
                 intent.setData(Uri.parse('tel:' + number))
                 Activity.mActivity.startActivity(intent)
             except Exception as e:
