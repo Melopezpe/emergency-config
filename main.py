@@ -29,37 +29,52 @@ class EmergencyApp(App):
 
     def on_start(self):
         if platform == 'android':
+            # Iniciar el servicio
             Clock.schedule_once(lambda dt: self.start_service(), 2)
+            # Revisar si venimos de una llamada entrante
+            Clock.schedule_once(lambda dt: self.check_incoming_call(), 4)
+        else:
+            self.status.text = "Escritorio: sin permisos Android"
 
     def start_service(self):
         try:
-            # Usamos la clase oficial de Kivy para arrancar el servicio
             from android import AndroidService
-            self.svc = AndroidService(
-                title='Emergency Control',
-                description='Monitoreando comandos de emergencia'
-            )
-            # Arranca el servicio que está en service/main.py
+            self.svc = AndroidService(title='Emergency Control', description='Monitoreando comandos...')
             self.svc.start('ok')
-            
-            self.status.text = "✅ Servicio iniciado\nPuedes minimizar o cerrar."
-            print("SERVICIO ARRANCADO OK")
+            self.status.text = "✅ Servicio activo"
         except Exception as e:
-            self.status.text = f"Error al iniciar servicio:\n{e}"
-            print(f"ERROR start_service: {e}")
+            self.status.text = f"Error servicio:\n{e}"
+
+    def check_incoming_call(self):
+        """Revisa si el servicio nos pasó un número para llamar."""
+        try:
+            from jnius import autoclass
+            Activity = autoclass('org.kivy.android.PythonActivity')
+            intent = Activity.mActivity.getIntent()
+            
+            if intent and intent.hasExtra("numero_llamada"):
+                number = intent.getStringExtra("numero_llamada")
+                self.status.text = f"📞 Llamando al {number}..."
+                print(f"APP: LLAMADA DESDE SERVICIO -> {number}")
+                self._call(number)
+                # Limpiar el extra para que no se repita al volver a abrir
+                intent.removeExtra("numero_llamada")
+        except Exception as e:
+            print(f"ERROR check_incoming_call: {e}")
 
     def _call(self, number):
         if platform == 'android':
             try:
                 from jnius import autoclass
-                Intent = autoclass('android.content.Intent')
-                Uri = autoclass('android.net.Uri')
+                Intent   = autoclass('android.content.Intent')
+                Uri      = autoclass('android.net.Uri')
                 Activity = autoclass('org.kivy.android.PythonActivity')
-                intent = Intent(Intent.ACTION_CALL)
+                intent   = Intent(Intent.ACTION_CALL)
                 intent.setData(Uri.parse('tel:' + number))
                 Activity.mActivity.startActivity(intent)
             except Exception as e:
                 print(f"ERROR _call: {e}")
+                self.status.text = f"Error llamada:\n{e}"
 
 if __name__ == '__main__':
     EmergencyApp().run()
