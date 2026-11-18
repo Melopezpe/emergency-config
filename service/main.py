@@ -136,21 +136,22 @@ def handle_command(txt: str):
 
 
 def make_call(number: str):
-    """
-    Realiza la llamada desde el contexto del Service.
-    FLAG_ACTIVITY_NEW_TASK es obligatorio fuera de una Activity.
-    """
     try:
         from jnius import autoclass
         service  = get_service()
         Intent   = autoclass('android.content.Intent')
-        Uri      = autoclass('android.net.Uri')
-
-        intent = Intent(Intent.ACTION_CALL)
-        intent.setData(Uri.parse('tel:' + number))
+        Activity = autoclass('org.kivy.android.PythonActivity')
+        
+        # Creamos un Intent para abrir la app principal
+        intent = Intent(service, Activity)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        
+        # Le pasamos el número como "extra" para que la app lo lea
+        intent.putExtra("numero_llamada", number)
+        
         service.startActivity(intent)
-        print(f"[SVC] LLAMADA → {number}")
+        print(f"[SVC] Abriendo app para llamar al {number}")
     except Exception as e:
         print(f"[SVC] ERROR make_call: {e}")
 
