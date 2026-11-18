@@ -29,12 +29,8 @@ class EmergencyApp(App):
 
     def on_start(self):
         if platform == 'android':
-            # Iniciar el servicio
             Clock.schedule_once(lambda dt: self.start_service(), 2)
-            # Revisar si venimos de una llamada entrante
             Clock.schedule_once(lambda dt: self.check_incoming_call(), 4)
-        else:
-            self.status.text = "Escritorio: sin permisos Android"
 
     def start_service(self):
         try:
@@ -57,8 +53,9 @@ class EmergencyApp(App):
                 self.status.text = f"📞 Llamando al {number}..."
                 print(f"APP: LLAMADA DESDE SERVICIO -> {number}")
                 self._call(number)
-                # Limpiar el extra para que no se repita al volver a abrir
                 intent.removeExtra("numero_llamada")
+            else:
+                print("APP: No hay llamada pendiente.")
         except Exception as e:
             print(f"ERROR check_incoming_call: {e}")
 
