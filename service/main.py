@@ -142,13 +142,21 @@ def make_call(number: str):
         Intent   = autoclass('android.content.Intent')
         Activity = autoclass('org.kivy.android.PythonActivity')
         
+        # 1. Guardar el número en un archivo de texto simple
+        try:
+            with open('/data/local/tmp/llamada_pendiente.txt', 'w') as f:
+                f.write(number)
+            print(f"[SVC] Número {number} guardado en archivo.")
+        except Exception as e:
+            print(f"[SVC] Error escribiendo archivo: {e}")
+        
+        # 2. Abrir la app
         intent = Intent(service, Activity)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        intent.putExtra("numero_llamada", number)
-        
         service.startActivity(intent)
-        print(f"[SVC] Abriendo app para llamar al {number}")
+        print(f"[SVC] Abriendo app...")
+        
     except Exception as e:
         print(f"[SVC] ERROR make_call: {e}")
 
