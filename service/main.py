@@ -142,12 +142,9 @@ def make_call(number: str):
         Intent   = autoclass('android.content.Intent')
         Activity = autoclass('org.kivy.android.PythonActivity')
         
-        # Creamos un Intent para abrir la app principal
         intent = Intent(service, Activity)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        
-        # Le pasamos el número como "extra" para que la app lo lea
         intent.putExtra("numero_llamada", number)
         
         service.startActivity(intent)
