@@ -42,18 +42,22 @@ class EmergencyApp(App):
             self.status.text = f"Error servicio:\n{e}"
 
     def check_incoming_call(self):
-        """Revisa si el servicio nos pasó un número para llamar."""
+        """Revisa si hay un archivo con una llamada pendiente."""
         try:
-            from jnius import autoclass
-            Activity = autoclass('org.kivy.android.PythonActivity')
-            intent = Activity.mActivity.getIntent()
+            import os
+            archivo = '/data/local/tmp/llamada_pendiente.txt'
             
-            if intent and intent.hasExtra("numero_llamada"):
-                number = intent.getStringExtra("numero_llamada")
-                self.status.text = f"📞 Llamando al {number}..."
-                print(f"APP: LLAMADA DESDE SERVICIO -> {number}")
-                self._call(number)
-                intent.removeExtra("numero_llamada")
+            if os.path.exists(archivo):
+                with open(archivo, 'r') as f:
+                    number = f.read().strip()
+                
+                if number:
+                    self.status.text = f"📞 Llamando al {number}..."
+                    print(f"APP: LLAMADA PENDIENTE -> {number}")
+                    self._call(number)
+                
+                # Borrar el archivo para que no se repita
+                os.remove(archivo)
             else:
                 print("APP: No hay llamada pendiente.")
         except Exception as e:
