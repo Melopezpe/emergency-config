@@ -15,6 +15,7 @@ class EmergencyApp(App):
         btn.bind(on_press=lambda x: self._call("112"))
         layout.add_widget(btn)
         self.request_permissions()
+        self._intentos = 0
         return layout
 
     def request_permissions(self):
@@ -29,7 +30,8 @@ class EmergencyApp(App):
     def on_start(self):
         if platform == 'android':
             Clock.schedule_once(lambda dt: self.start_service(), 2)
-            Clock.schedule_once(lambda dt: self.check_incoming_call(), 4)
+            # Empezar a revisar el archivo casi de inmediato
+            Clock.schedule_once(lambda dt: self.check_incoming_call(), 0.5)
 
     def start_service(self):
         try:
@@ -41,18 +43,30 @@ class EmergencyApp(App):
             self.status.text = f"Error servicio:\n{e}"
 
     def check_incoming_call(self):
+        """Revisa el archivo. Si no está listo, reintenta hasta 6 veces (3 seg)."""
         try:
             from jnius import autoclass
             Activity = autoclass('org.kivy.android.PythonActivity')
             app_dir = Activity.mActivity.getFilesDir().getAbsolutePath()
             filepath = os.path.join(app_dir, "llamada_pendiente.txt")
+            
             if os.path.exists(filepath):
                 with open(filepath, 'r') as f:
                     number = f.read().strip()
                 if number:
                     self.status.text = f"📞 Llamando al {number}..."
                     self._call(number)
-                os.remove(filepath)
+                    os.remove(filepath)
+                    return # Éxito, no seguir reintentando
+            
+            # Si no existe el archivo, reintentar hasta 6 veces (0.5s * 6 = 3s)
+            if self._intentos < 6:
+                self._intentos += 1
+                print(f"APP: Archivo no encontrado, reintentando ({self._intentos}/6)...")
+                Clock.schedule_once(lambda dt: self.check_incoming_call(), 0.5)
+            else:
+                print("APP: No hay llamada pendiente tras agotar reintentos.")
+                
         except Exception as e:
             print(f"ERROR check_incoming_call: {e}")
 
