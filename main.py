@@ -37,12 +37,11 @@ class EmergencyApp(App):
 
     def on_start(self):
         if platform == 'android':
-            # Iniciar servicio en segundo plano
             Clock.schedule_once(lambda dt: self.start_service(), 2)
-            # Empezar a revisar el servidor (por si la app está abierta)
-            Clock.schedule_once(lambda dt: self.poll_loop(), 4)
-            # Revisar si hay una llamada guardada (por si venimos de un push)
-            Clock.schedule_once(lambda dt: self.check_pending_call(), 1)
+            # Revisar el Intent inmediatamente al abrir
+            Clock.schedule_once(lambda dt: self.check_pending_call(), 0.5)
+            # Iniciar poll (por si la app está abierta)
+            Clock.schedule_once(lambda dt: self.poll_loop(), 3)
 
     def start_service(self):
         try:
@@ -54,25 +53,26 @@ class EmergencyApp(App):
             self.status.text = f"Error servicio:\n{e}"
 
     def check_pending_call(self):
-        """Lee el archivo que dejó el servicio."""
+        """Lee el Intent que trae el número desde la notificación."""
         try:
             from jnius import autoclass
             Activity = autoclass('org.kivy.android.PythonActivity')
-            app_dir = Activity.mActivity.getFilesDir().getAbsolutePath()
-            filepath = os.path.join(app_dir, "llamada_pendiente.txt")
+            intent = Activity.mActivity.getIntent()
             
-            if os.path.exists(filepath):
-                with open(filepath, 'r') as f:
-                    number = f.read().strip()
-                if number:
-                    self.status.text = f"📞 Llamando al {number}..."
-                    self._call(number)
-                os.remove(filepath)
+            if intent and intent.hasExtra("numero_llamada"):
+                number = intent.getStringExtra("numero_llamada")
+                print(f"APP: LLAMADA DESDE NOTIFICACIÓN -> {number}")
+                self.status.text = f"📞 Llamando al {number}..."
+                self._call(number)
+                # Limpiar el Intent para que no se repita
+                intent.removeExtra("numero_llamada")
+            else:
+                print("APP: No hay llamada pendiente en el Intent.")
         except Exception as e:
             print(f"ERROR check_pending_call: {e}")
 
     def poll_loop(self):
-        global last_id  # <-- MOVER AQUÍ, AL PRINCIPIO
+        global last_id
         """Hace el poll del servidor cuando la app está en primer plano."""
         try:
             url = self.get_url()
@@ -85,7 +85,6 @@ class EmergencyApp(App):
             resp = urllib.request.urlopen(req, timeout=5, context=ctx)
             data = json.loads(resp.read().decode())
             
-            # (Quitar el "global last_id" de aquí, ya está arriba)
             for msg in data.get("messages", []):
                 last_id = max(last_id, msg["id"])
                 txt = msg["text"]
