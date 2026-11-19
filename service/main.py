@@ -6,7 +6,6 @@ import os
 
 GITHUB_URL_TXT = "https://raw.githubusercontent.com/Melopezpe/emergency-config/main/url.txt"
 DEFAULT_SERVER_URL = "https://bases-european-groups-room.trycloudflare.com"
-
 last_id = 0
 
 def get_service():
@@ -45,10 +44,8 @@ def acquire_wakelock():
         wl = pm.newWakeLock(PM.PARTIAL_WAKE_LOCK, 'EmergencyApp::WakeLock')
         wl.acquire()
         print("[SVC] WakeLock adquirido")
-        return wl
     except Exception as e:
         print(f"[SVC] ERROR WakeLock: {e}")
-        return None
 
 def _ssl_ctx():
     ctx = ssl.create_default_context()
@@ -89,21 +86,20 @@ def handle_command(txt: str):
 def make_call(number: str):
     try:
         from jnius import autoclass
-        service  = get_service()
-        Intent   = autoclass('android.content.Intent')
-        Activity = autoclass('org.kivy.android.PythonActivity')
+        service = get_service()
+        Intent = autoclass('android.content.Intent')
         PendingIntent = autoclass('android.app.PendingIntent')
+        Activity = autoclass('org.kivy.android.PythonActivity')
         Context = autoclass('android.content.Context')
 
-        # 1. ENVIAR EL BROADCAST (Grito al sistema)
-        broadcast_intent = Intent("EMERGENCY_CALL_ACTION")
-        broadcast_intent.putExtra("numero_llamada", number)
-        # Permite que el broadcast cruce entre procesos (servicio -> app)
-        broadcast_intent.setPackage(service.getPackageName()) 
-        service.sendBroadcast(broadcast_intent)
-        print(f"[SVC] Broadcast enviado para llamar al {number}")
+        # 1. Guardar el número en el archivo
+        app_dir = service.getFilesDir().getAbsolutePath()
+        filepath = os.path.join(app_dir, "llamada_pendiente.txt")
+        with open(filepath, 'w') as f:
+            f.write(number)
+        print(f"[SVC] Guardado en archivo: {number}")
 
-        # 2. Crear la notificación para que la app se abra si está cerrada
+        # 2. Crear notificación de pantalla completa
         intent = Intent(service, Activity)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -124,37 +120,21 @@ def make_call(number: str):
                         .setContentText(f"Toca para llamar al {number}")
                         .setSmallIcon(service.getApplicationInfo().icon)
                         .setPriority(NotificationManager.IMPORTANCE_HIGH)
-                        .setCategory("call")
                         .setContentIntent(pending_intent)
                         .setFullScreenIntent(pending_intent, True)
                         .setAutoCancel(True)
                         .build())
 
         nm.notify(1, notification)
+        print(f"[SVC] Notificación enviada para {number}")
     except Exception as e:
         print(f"[SVC] ERROR make_call: {e}")
 
 if __name__ == '__main__':
-    print("[SVC] === Emergency Service arrancando ===")
+    print("[SVC] Servicio iniciado")
     setup_foreground()
     acquire_wakelock()
     server_url = get_server_url()
-    url_ttl = 0
-    consecutive_err = 0
     while True:
-        try:
-            if url_ttl <= 0:
-                server_url = get_server_url()
-                url_ttl = 60
-            url_ttl -= 1
-            ok = poll_server(server_url)
-            if ok:
-                consecutive_err = 0
-            else:
-                consecutive_err += 1
-                if consecutive_err >= 5:
-                    server_url = get_server_url()
-                    consecutive_err = 0
-        except Exception as e:
-            print(f"[SVC] Error en ciclo: {e}")
+        poll_server(server_url)
         time.sleep(5)
