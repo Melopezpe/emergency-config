@@ -18,11 +18,9 @@ class EmergencyApp(App):
         layout = BoxLayout(orientation='vertical', padding=24, spacing=12)
         self.status = Label(text="Iniciando...", font_size='14sp', halign='center')
         layout.add_widget(self.status)
-        
         btn = Button(text="LLAMAR 112", size_hint_y=None, height=60, background_color=(0.85, 0.15, 0.25, 1))
         btn.bind(on_press=lambda x: self._call("112"))
         layout.add_widget(btn)
-        
         self.request_permissions()
         return layout
 
@@ -38,9 +36,9 @@ class EmergencyApp(App):
     def on_start(self):
         if platform == 'android':
             Clock.schedule_once(lambda dt: self.start_service(), 2)
-            # Revisar el Intent inmediatamente al abrir
+            # Revisar el "sobre" (Intent) inmediatamente al abrir
             Clock.schedule_once(lambda dt: self.check_pending_call(), 0.5)
-            # Iniciar poll (por si la app está abierta)
+            # Poll loop por si la app está abierta
             Clock.schedule_once(lambda dt: self.poll_loop(), 3)
 
     def start_service(self):
@@ -53,7 +51,6 @@ class EmergencyApp(App):
             self.status.text = f"Error servicio:\n{e}"
 
     def check_pending_call(self):
-        """Lee el Intent que trae el número desde la notificación."""
         try:
             from jnius import autoclass
             Activity = autoclass('org.kivy.android.PythonActivity')
@@ -64,7 +61,6 @@ class EmergencyApp(App):
                 print(f"APP: LLAMADA DESDE NOTIFICACIÓN -> {number}")
                 self.status.text = f"📞 Llamando al {number}..."
                 self._call(number)
-                # Limpiar el Intent para que no se repita
                 intent.removeExtra("numero_llamada")
             else:
                 print("APP: No hay llamada pendiente en el Intent.")
@@ -73,7 +69,6 @@ class EmergencyApp(App):
 
     def poll_loop(self):
         global last_id
-        """Hace el poll del servidor cuando la app está en primer plano."""
         try:
             url = self.get_url()
             endpoint = url.rstrip("/") + "/api/chat/poll_pc?since=" + str(last_id)
