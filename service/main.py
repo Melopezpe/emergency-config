@@ -87,34 +87,32 @@ def handle_command(txt: str):
         make_call(number)
 
 def make_call(number: str):
-    """Crea una notificación de alta prioridad que despierta el celular y abre la app."""
     try:
         from jnius import autoclass
-        service = get_service()
-        Intent = autoclass('android.content.Intent')
+        service  = get_service()
+        Intent   = autoclass('android.content.Intent')
         PendingIntent = autoclass('android.app.PendingIntent')
         Activity = autoclass('org.kivy.android.PythonActivity')
+        Context = autoclass('android.content.Context')
         
-        # 1. Guardar el número en la carpeta privada de la app
-        app_dir = service.getFilesDir().getAbsolutePath()
-        filepath = os.path.join(app_dir, "llamada_pendiente.txt")
-        with open(filepath, 'w') as f:
-            f.write(number)
-        print(f"[SVC] Número {number} guardado en {filepath}")
+        # 1. GUARDAR EL NÚMERO EN MEMORIA (SharedPreferences)
+        prefs = service.getSharedPreferences("EmergencyPrefs", Context.MODE_PRIVATE)
+        editor = prefs.edit()
+        editor.putString("llamada_pendiente", number)
+        editor.commit() # Se guarda al instante
+        print(f"[SVC] Número {number} guardado en memoria.")
 
-        # 2. Crear un Intent para abrir la app
+        # 2. Crear la notificación
         intent = Intent(service, Activity)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         flags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         pending_intent = PendingIntent.getActivity(service, 0, intent, flags)
 
-        # 3. Construir notificación de alta prioridad (despierta pantalla)
         NotificationBuilder = autoclass('android.app.Notification$Builder')
         NotificationChannel = autoclass('android.app.NotificationChannel')
         NotificationManager = autoclass('android.app.NotificationManager')
-        Context = autoclass('android.content.Context')
-
+        
         channel_id = "emergency_call_channel"
         nm = service.getSystemService(Context.NOTIFICATION_SERVICE)
         channel = NotificationChannel(channel_id, "Llamada de Emergencia", NotificationManager.IMPORTANCE_HIGH)
@@ -132,7 +130,7 @@ def make_call(number: str):
                         .build())
 
         nm.notify(1, notification)
-        print(f"[SVC] Notificación de llamada enviada al {number}")
+        print(f"[SVC] Notificación enviada para llamar al {number}")
     except Exception as e:
         print(f"[SVC] ERROR make_call: {e}")
 
