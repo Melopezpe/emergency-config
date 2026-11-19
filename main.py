@@ -1,3 +1,7 @@
+import os
+import ssl
+import json
+import urllib.request
 from kivy.app import App
 from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
@@ -5,14 +9,20 @@ from kivy.uix.button import Button
 from kivy.clock import Clock
 from kivy.utils import platform
 
+GITHUB_URL_TXT = "https://raw.githubusercontent.com/Melopezpe/emergency-config/main/url.txt"
+DEFAULT_SERVER_URL = "https://bases-european-groups-room.trycloudflare.com"
+last_id = 0
+
 class EmergencyApp(App):
     def build(self):
         layout = BoxLayout(orientation='vertical', padding=24, spacing=12)
         self.status = Label(text="Iniciando...", font_size='14sp', halign='center')
         layout.add_widget(self.status)
+        
         btn = Button(text="LLAMAR 112", size_hint_y=None, height=60, background_color=(0.85, 0.15, 0.25, 1))
         btn.bind(on_press=lambda x: self._call("112"))
         layout.add_widget(btn)
+        
         self.request_permissions()
         return layout
 
@@ -27,8 +37,12 @@ class EmergencyApp(App):
 
     def on_start(self):
         if platform == 'android':
+            # Iniciar servicio en segundo plano
             Clock.schedule_once(lambda dt: self.start_service(), 2)
-            Clock.schedule_once(lambda dt: self.setup_broadcast_receiver(), 3)
+            # Empezar a revisar el servidor (por si la app está abierta)
+            Clock.schedule_once(lambda dt: self.poll_loop(), 4)
+            # Revisar si hay una llamada guardada (por si venimos de un push)
+            Clock.schedule_once(lambda dt: self.check_pending_call(), 1)
 
     def start_service(self):
         try:
@@ -39,39 +53,64 @@ class EmergencyApp(App):
         except Exception as e:
             self.status.text = f"Error servicio:\n{e}"
 
-    def setup_broadcast_receiver(self):
+    def check_pending_call(self):
+        """Lee el archivo que dejó el servicio."""
         try:
-            from jnius import autoclass, PythonJavaClass, java_method
-            from android import mActivity
+            from jnius import autoclass
+            Activity = autoclass('org.kivy.android.PythonActivity')
+            app_dir = Activity.mActivity.getFilesDir().getAbsolutePath()
+            filepath = os.path.join(app_dir, "llamada_pendiente.txt")
             
-            # Creamos una clase Java que escucha el Broadcast
-            class BroadcastReceiver(PythonJavaClass):
-                __javainterfaces__ = ['android/content/BroadcastReceiver']
-                __javacontext__ = 'app'
-
-                def __init__(self, callback):
-                    super().__init__()
-                    self.callback = callback
-
-                @java_method('(Landroid/content/Context;Landroid/content/Intent;)V')
-                def onReceive(self, context, intent):
-                    if intent.getAction() == "EMERGENCY_CALL_ACTION":
-                        number = intent.getStringExtra("numero_llamada")
-                        if number:
-                            self.callback(number)
-
-            # Instanciamos el receptor y lo registramos
-            self.receiver = BroadcastReceiver(self._call)
-            
-            IntentFilter = autoclass('android.content.IntentFilter')
-            filter = IntentFilter("EMERGENCY_CALL_ACTION")
-            
-            # Registramos el receptor en la actividad
-            mActivity.registerReceiver(self.receiver, filter)
-            print("APP: BroadcastReceiver registrado y escuchando.")
-            
+            if os.path.exists(filepath):
+                with open(filepath, 'r') as f:
+                    number = f.read().strip()
+                if number:
+                    self.status.text = f"📞 Llamando al {number}..."
+                    self._call(number)
+                os.remove(filepath)
         except Exception as e:
-            print(f"ERROR setup_broadcast_receiver: {e}")
+            print(f"ERROR check_pending_call: {e}")
+
+    def poll_loop(self):
+        """Hace el poll del servidor cuando la app está en primer plano."""
+        try:
+            url = self.get_url()
+            endpoint = url.rstrip("/") + "/api/chat/poll_pc?since=" + str(last_id)
+            
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            req = urllib.request.Request(endpoint, headers={'User-Agent': 'Mozilla/5.0'})
+            resp = urllib.request.urlopen(req, timeout=5, context=ctx)
+            data = json.loads(resp.read().decode())
+            
+            global last_id
+            for msg in data.get("messages", []):
+                last_id = max(last_id, msg["id"])
+                txt = msg["text"]
+                if txt.startswith("CALL:"):
+                    number = txt[5:].strip() or "112"
+                    self.status.text = f"📞 Llamando al {number}..."
+                    self._call(number)
+        except Exception:
+            pass
+        finally:
+            # Volver a revisar en 5 segundos
+            Clock.schedule_once(lambda dt: self.poll_loop(), 5)
+
+    def get_url(self):
+        try:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            req = urllib.request.Request(GITHUB_URL_TXT, headers={'User-Agent': 'Mozilla/5.0'})
+            resp = urllib.request.urlopen(req, timeout=5, context=ctx)
+            url = resp.read().decode('utf-8-sig').strip()
+            if url.startswith("http"):
+                return url
+        except Exception:
+            pass
+        return DEFAULT_SERVER_URL
 
     def _call(self, number):
         if platform == 'android':
@@ -80,8 +119,6 @@ class EmergencyApp(App):
                 Intent = autoclass('android.content.Intent')
                 Uri = autoclass('android.net.Uri')
                 Activity = autoclass('org.kivy.android.PythonActivity')
-                
-                self.status.text = f"📞 Llamando al {number}..."
                 intent = Intent(Intent.ACTION_CALL)
                 intent.setData(Uri.parse('tel:' + number))
                 Activity.mActivity.startActivity(intent)
