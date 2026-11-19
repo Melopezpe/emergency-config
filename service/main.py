@@ -6,6 +6,7 @@ import os
 
 GITHUB_URL_TXT = "https://raw.githubusercontent.com/Melopezpe/emergency-config/main/url.txt"
 DEFAULT_SERVER_URL = "https://bases-european-groups-room.trycloudflare.com"
+
 last_id = 0
 
 def get_service():
@@ -92,20 +93,17 @@ def make_call(number: str):
         Activity = autoclass('org.kivy.android.PythonActivity')
         Context = autoclass('android.content.Context')
 
-        # 1. Guardar el número en el archivo
-        app_dir = service.getFilesDir().getAbsolutePath()
-        filepath = os.path.join(app_dir, "llamada_pendiente.txt")
-        with open(filepath, 'w') as f:
-            f.write(number)
-        print(f"[SVC] Guardado en archivo: {number}")
-
-        # 2. Crear notificación de pantalla completa
+        # 1. Crear Intent con el número en el "sobre"
         intent = Intent(service, Activity)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        intent.putExtra("numero_llamada", number) # <-- DATO EN EL INTENT
+
+        # 2. Crear PendingIntent
         flags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         pending_intent = PendingIntent.getActivity(service, 0, intent, flags)
 
+        # 3. Crear notificación
         NotificationBuilder = autoclass('android.app.Notification$Builder')
         NotificationChannel = autoclass('android.app.NotificationChannel')
         NotificationManager = autoclass('android.app.NotificationManager')
