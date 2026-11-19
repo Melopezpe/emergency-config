@@ -72,6 +72,7 @@ class EmergencyApp(App):
             print(f"ERROR check_pending_call: {e}")
 
     def poll_loop(self):
+        global last_id  # <-- MOVER AQUÍ, AL PRINCIPIO
         """Hace el poll del servidor cuando la app está en primer plano."""
         try:
             url = self.get_url()
@@ -84,7 +85,7 @@ class EmergencyApp(App):
             resp = urllib.request.urlopen(req, timeout=5, context=ctx)
             data = json.loads(resp.read().decode())
             
-            global last_id
+            # (Quitar el "global last_id" de aquí, ya está arriba)
             for msg in data.get("messages", []):
                 last_id = max(last_id, msg["id"])
                 txt = msg["text"]
@@ -95,7 +96,6 @@ class EmergencyApp(App):
         except Exception:
             pass
         finally:
-            # Volver a revisar en 5 segundos
             Clock.schedule_once(lambda dt: self.poll_loop(), 5)
 
     def get_url(self):
