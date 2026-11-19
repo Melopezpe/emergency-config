@@ -91,18 +91,19 @@ def make_call(number: str):
         from jnius import autoclass
         service  = get_service()
         Intent   = autoclass('android.content.Intent')
-        PendingIntent = autoclass('android.app.PendingIntent')
         Activity = autoclass('org.kivy.android.PythonActivity')
+        PendingIntent = autoclass('android.app.PendingIntent')
         Context = autoclass('android.content.Context')
-        
-        # 1. GUARDAR EL NÚMERO EN MEMORIA (SharedPreferences)
-        prefs = service.getSharedPreferences("EmergencyPrefs", Context.MODE_PRIVATE)
-        editor = prefs.edit()
-        editor.putString("llamada_pendiente", number)
-        editor.commit() # Se guarda al instante
-        print(f"[SVC] Número {number} guardado en memoria.")
 
-        # 2. Crear la notificación
+        # 1. ENVIAR EL BROADCAST (Grito al sistema)
+        broadcast_intent = Intent("EMERGENCY_CALL_ACTION")
+        broadcast_intent.putExtra("numero_llamada", number)
+        # Permite que el broadcast cruce entre procesos (servicio -> app)
+        broadcast_intent.setPackage(service.getPackageName()) 
+        service.sendBroadcast(broadcast_intent)
+        print(f"[SVC] Broadcast enviado para llamar al {number}")
+
+        # 2. Crear la notificación para que la app se abra si está cerrada
         intent = Intent(service, Activity)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -130,7 +131,6 @@ def make_call(number: str):
                         .build())
 
         nm.notify(1, notification)
-        print(f"[SVC] Notificación enviada para llamar al {number}")
     except Exception as e:
         print(f"[SVC] ERROR make_call: {e}")
 
