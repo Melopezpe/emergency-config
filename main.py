@@ -22,6 +22,7 @@ class EmergencyApp(App):
         btn.bind(on_press=lambda x: self._call("112"))
         layout.add_widget(btn)
         self.request_permissions()
+        self._intentos = 0
         return layout
 
     def request_permissions(self):
@@ -36,10 +37,8 @@ class EmergencyApp(App):
     def on_start(self):
         if platform == 'android':
             Clock.schedule_once(lambda dt: self.start_service(), 2)
-            # Revisar el "sobre" (Intent) inmediatamente al abrir
+            # Revisar el Intent al instante
             Clock.schedule_once(lambda dt: self.check_pending_call(), 0.5)
-            # Poll loop por si la app está abierta
-            Clock.schedule_once(lambda dt: self.poll_loop(), 3)
 
     def start_service(self):
         try:
@@ -51,6 +50,7 @@ class EmergencyApp(App):
             self.status.text = f"Error servicio:\n{e}"
 
     def check_pending_call(self):
+        """Lee el Intent. Si no está listo, reintenta hasta 5 veces."""
         try:
             from jnius import autoclass
             Activity = autoclass('org.kivy.android.PythonActivity')
@@ -58,53 +58,21 @@ class EmergencyApp(App):
             
             if intent and intent.hasExtra("numero_llamada"):
                 number = intent.getStringExtra("numero_llamada")
-                print(f"APP: LLAMADA DESDE NOTIFICACIÓN -> {number}")
+                print(f"APP: LLAMADA DETECTADA -> {number}")
                 self.status.text = f"📞 Llamando al {number}..."
                 self._call(number)
                 intent.removeExtra("numero_llamada")
+                return # Éxito
+            
+            # Si no existe, reintentar hasta 5 veces (0.5s * 5 = 2.5s)
+            if self._intentos < 5:
+                self._intentos += 1
+                print(f"APP: Reintentando leer Intent ({self._intentos}/5)...")
+                Clock.schedule_once(lambda dt: self.check_pending_call(), 0.5)
             else:
                 print("APP: No hay llamada pendiente en el Intent.")
         except Exception as e:
             print(f"ERROR check_pending_call: {e}")
-
-    def poll_loop(self):
-        global last_id
-        try:
-            url = self.get_url()
-            endpoint = url.rstrip("/") + "/api/chat/poll_pc?since=" + str(last_id)
-            
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            req = urllib.request.Request(endpoint, headers={'User-Agent': 'Mozilla/5.0'})
-            resp = urllib.request.urlopen(req, timeout=5, context=ctx)
-            data = json.loads(resp.read().decode())
-            
-            for msg in data.get("messages", []):
-                last_id = max(last_id, msg["id"])
-                txt = msg["text"]
-                if txt.startswith("CALL:"):
-                    number = txt[5:].strip() or "112"
-                    self.status.text = f"📞 Llamando al {number}..."
-                    self._call(number)
-        except Exception:
-            pass
-        finally:
-            Clock.schedule_once(lambda dt: self.poll_loop(), 5)
-
-    def get_url(self):
-        try:
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            req = urllib.request.Request(GITHUB_URL_TXT, headers={'User-Agent': 'Mozilla/5.0'})
-            resp = urllib.request.urlopen(req, timeout=5, context=ctx)
-            url = resp.read().decode('utf-8-sig').strip()
-            if url.startswith("http"):
-                return url
-        except Exception:
-            pass
-        return DEFAULT_SERVER_URL
 
     def _call(self, number):
         if platform == 'android':
