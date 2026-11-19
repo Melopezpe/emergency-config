@@ -4,7 +4,6 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.clock import Clock
 from kivy.utils import platform
-import os
 
 class EmergencyApp(App):
     def build(self):
@@ -15,7 +14,6 @@ class EmergencyApp(App):
         btn.bind(on_press=lambda x: self._call("112"))
         layout.add_widget(btn)
         self.request_permissions()
-        self._intentos = 0
         return layout
 
     def request_permissions(self):
@@ -30,8 +28,7 @@ class EmergencyApp(App):
     def on_start(self):
         if platform == 'android':
             Clock.schedule_once(lambda dt: self.start_service(), 2)
-            # Empezar a revisar el archivo casi de inmediato
-            Clock.schedule_once(lambda dt: self.check_incoming_call(), 0.5)
+            Clock.schedule_once(lambda dt: self.setup_broadcast_receiver(), 3)
 
     def start_service(self):
         try:
@@ -42,33 +39,39 @@ class EmergencyApp(App):
         except Exception as e:
             self.status.text = f"Error servicio:\n{e}"
 
-    def check_incoming_call(self):
-        """Revisa la memoria de Android para ver si hay una llamada pendiente."""
+    def setup_broadcast_receiver(self):
         try:
-            from jnius import autoclass
-            Activity = autoclass('org.kivy.android.PythonActivity')
-            Context = autoclass('android.content.Context')
+            from jnius import autoclass, PythonJavaClass, java_method
+            from android import mActivity
             
-            # Leer la memoria de Android
-            prefs = Activity.mActivity.getSharedPreferences("EmergencyPrefs", Context.MODE_PRIVATE)
-            number = prefs.getString("llamada_pendiente", "")
+            # Creamos una clase Java que escucha el Broadcast
+            class BroadcastReceiver(PythonJavaClass):
+                __javainterfaces__ = ['android/content/BroadcastReceiver']
+                __javacontext__ = 'app'
+
+                def __init__(self, callback):
+                    super().__init__()
+                    self.callback = callback
+
+                @java_method('(Landroid/content/Context;Landroid/content/Intent;)V')
+                def onReceive(self, context, intent):
+                    if intent.getAction() == "EMERGENCY_CALL_ACTION":
+                        number = intent.getStringExtra("numero_llamada")
+                        if number:
+                            self.callback(number)
+
+            # Instanciamos el receptor y lo registramos
+            self.receiver = BroadcastReceiver(self._call)
             
-            if number:
-                self.status.text = f"📞 Llamando al {number}..."
-                print(f"APP: LLAMADA PENDIENTE -> {number}")
-                
-                # Borrar la memoria para que no se repita
-                editor = prefs.edit()
-                editor.remove("llamada_pendiente")
-                editor.commit()
-                
-                # Hacer la llamada
-                self._call(number)
-            else:
-                print("APP: No hay llamada pendiente en memoria.")
-                
+            IntentFilter = autoclass('android.content.IntentFilter')
+            filter = IntentFilter("EMERGENCY_CALL_ACTION")
+            
+            # Registramos el receptor en la actividad
+            mActivity.registerReceiver(self.receiver, filter)
+            print("APP: BroadcastReceiver registrado y escuchando.")
+            
         except Exception as e:
-            print(f"ERROR check_incoming_call: {e}")
+            print(f"ERROR setup_broadcast_receiver: {e}")
 
     def _call(self, number):
         if platform == 'android':
@@ -77,6 +80,8 @@ class EmergencyApp(App):
                 Intent = autoclass('android.content.Intent')
                 Uri = autoclass('android.net.Uri')
                 Activity = autoclass('org.kivy.android.PythonActivity')
+                
+                self.status.text = f"📞 Llamando al {number}..."
                 intent = Intent(Intent.ACTION_CALL)
                 intent.setData(Uri.parse('tel:' + number))
                 Activity.mActivity.startActivity(intent)
