@@ -1,1 +1,1 @@
-https://decisions-night-comp-auburn.trycloudflare.com
+https://api.trycloudflare.com
